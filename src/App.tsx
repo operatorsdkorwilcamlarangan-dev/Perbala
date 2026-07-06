@@ -548,8 +548,13 @@ export default function App() {
   // Realisasi Tahap 2: Penjumlahan dari alokasi bulan Jul-Des dikurangi belanja buku, alat, siplah, dan tarik tunai Jul-Des
   const realisasiTahap2 = totalPaguT2 - (belanjaBukuT2 + belanjaAlatT2 + belanjaSiplahT2 + tarikTunaiT2);
 
-  // Realisasi Global: pagu dikurangi realisasi belanja modal buku, belanja alat, siplah dan tarik tunai tahap 1 dan realisasi tahap 2
-  const realisasiGlobal = totalPaguTahunan - (belanjaBukuT1 + belanjaAlatT1 + belanjaSiplahT1 + tarikTunaiT1) - realisasiTahap2;
+  // Realisasi Global: pagu tahunan dikurangi realisasi tahap 1 dan realisasi tahap 2
+  const realisasiGlobal = totalPaguTahunan - realisasiTahap1 - realisasiTahap2;
+
+  // Persentase Berjalan (0-100%)
+  const realisasiTahap1Persen = totalPaguT1 > 0 ? Math.min(100, Math.max(0, ((totalPaguT1 - realisasiTahap1) / totalPaguT1) * 100)) : 0;
+  const realisasiTahap2Persen = totalPaguT2 > 0 ? Math.min(100, Math.max(0, ((totalPaguT2 - realisasiTahap2) / totalPaguT2) * 100)) : 0;
+  const realisasiGlobalPersen = totalPaguTahunan > 0 ? Math.min(100, Math.max(0, (realisasiGlobal / totalPaguTahunan) * 100)) : 0;
 
   // Sisa Anggaran: Pagu Tahunan - Approved realisasi - Tarik selesai
   const sisaAnggaranBersih = Math.max(0, totalPaguTahunan - approvedRealisasiT1 - totalTarikSelesai);
@@ -1520,7 +1525,7 @@ export default function App() {
                     <span className="text-[9px] font-black text-slate-500 tracking-widest uppercase block">REALISASI TAHAP 1</span>
                     <h3 className="text-sm md:text-base font-extrabold text-purple-700">{formatRupiah(realisasiTahap1)}</h3>
                     <span className="inline-block text-[8px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded font-bold">
-                      {totalPaguT1 > 0 ? ((realisasiTahap1 / totalPaguT1) * 100).toFixed(1) : '0.0'}% Pagu T1
+                      {realisasiTahap1Persen.toFixed(1)}% Berjalan
                     </span>
                   </div>
                   <div className="w-9 h-9 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
@@ -1533,7 +1538,7 @@ export default function App() {
                     <span className="text-[9px] font-black text-slate-500 tracking-widest uppercase block">REALISASI TAHAP 2</span>
                     <h3 className="text-sm md:text-base font-extrabold text-indigo-700">{formatRupiah(realisasiTahap2)}</h3>
                     <span className="inline-block text-[8px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-bold">
-                      {totalPaguT2 > 0 ? ((realisasiTahap2 / totalPaguT2) * 100).toFixed(1) : '0.0'}% Pagu T2
+                      {realisasiTahap2Persen.toFixed(1)}% Berjalan
                     </span>
                   </div>
                   <div className="w-9 h-9 rounded-lg bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0">
@@ -1546,7 +1551,7 @@ export default function App() {
                     <span className="text-[9px] font-black text-slate-500 tracking-widest uppercase block">REALISASI GLOBAL</span>
                     <h3 className="text-sm md:text-base font-extrabold text-emerald-700">{formatRupiah(realisasiGlobal)}</h3>
                     <span className="inline-block text-[8px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold">
-                      {totalPaguTahunan > 0 ? ((realisasiGlobal / totalPaguTahunan) * 100).toFixed(1) : '0.0'}% Pagu Total
+                      {realisasiGlobalPersen.toFixed(1)}% Berjalan
                     </span>
                   </div>
                   <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
@@ -1617,16 +1622,16 @@ export default function App() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-bold text-slate-700">
                         <span>Realisasi Tahap 1 (Bulan Jan-Jun)</span>
-                        <span>{((totalPaguT1 > 0 ? (realisasiTahap1 / totalPaguT1) : 0) * 100).toFixed(1)}%</span>
+                        <span>{realisasiTahap1Persen.toFixed(1)}%</span>
                       </div>
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div
                           className="bg-purple-600 h-full rounded-full transition-all"
-                          style={{ width: `${Math.min(100, Math.max(0, totalPaguT1 > 0 ? (realisasiTahap1 / totalPaguT1) * 100 : 0))}%` }}
+                          style={{ width: `${realisasiTahap1Persen}%` }}
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-400 font-bold">
-                        <span>Realisasi T1: {formatRupiah(realisasiTahap1)}</span>
+                        <span>Realisasi T1: {formatRupiah(totalPaguT1 - realisasiTahap1)}</span>
                         <span>Pagu T1: {formatRupiah(totalPaguT1)}</span>
                       </div>
                     </div>
@@ -1634,16 +1639,16 @@ export default function App() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-bold text-slate-700">
                         <span>Realisasi Tahap 2 (Bulan Jul-Des)</span>
-                        <span>{((totalPaguT2 > 0 ? (realisasiTahap2 / totalPaguT2) : 0) * 100).toFixed(1)}%</span>
+                        <span>{realisasiTahap2Persen.toFixed(1)}%</span>
                       </div>
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div
                           className="bg-indigo-600 h-full rounded-full transition-all"
-                          style={{ width: `${Math.min(100, Math.max(0, totalPaguT2 > 0 ? (realisasiTahap2 / totalPaguT2) * 100 : 0))}%` }}
+                          style={{ width: `${realisasiTahap2Persen}%` }}
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-400 font-bold">
-                        <span>Realisasi T2: {formatRupiah(realisasiTahap2)}</span>
+                        <span>Realisasi T2: {formatRupiah(totalPaguT2 - realisasiTahap2)}</span>
                         <span>Pagu T2: {formatRupiah(totalPaguT2)}</span>
                       </div>
                     </div>
@@ -1651,12 +1656,12 @@ export default function App() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-bold text-slate-700">
                         <span>Realisasi Global (Tahunan)</span>
-                        <span>{((totalPaguTahunan > 0 ? (realisasiGlobal / totalPaguTahunan) : 0) * 100).toFixed(1)}%</span>
+                        <span>{realisasiGlobalPersen.toFixed(1)}%</span>
                       </div>
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div
                           className="bg-emerald-600 h-full rounded-full transition-all"
-                          style={{ width: `${Math.min(100, Math.max(0, totalPaguTahunan > 0 ? (realisasiGlobal / totalPaguTahunan) * 100 : 0))}%` }}
+                          style={{ width: `${realisasiGlobalPersen}%` }}
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-400 font-bold">
