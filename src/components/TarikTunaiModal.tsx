@@ -110,14 +110,10 @@ export default function TarikTunaiModal({
 
       // Calculate running quota for month i:
       // runningQuota = runningQuota_prev + pagu_i - belanja_i - tarik_i
-      if (i === targetIdx) {
-        runningQuota = runningQuota + pagu - belanja - tarik;
-      } else {
-        runningQuota = Math.max(0, runningQuota + pagu - belanja - tarik);
-      }
+      runningQuota = runningQuota + pagu - belanja - tarik;
     }
 
-    return Math.max(0, runningQuota);
+    return runningQuota;
   };
 
   const getSisaKuotaSebelumnya = (bln: string): number => {
@@ -155,7 +151,7 @@ export default function TarikTunaiModal({
     .reduce((sum, curr) => sum + curr.nilai, 0);
 
   // Formula: pagu bulanan + sisa kuota pencairan bulan sebelumnya - belanja bulan ini - total tarik bulan ini
-  const availableLimit = Math.max(0, paguLimit + sisaKuotaSebelumnya - belanjaBulanIni - totalTarikBulanIni);
+  const availableLimit = paguLimit + sisaKuotaSebelumnya - belanjaBulanIni - totalTarikBulanIni;
   const isOverbudget = nilai > availableLimit;
 
   useEffect(() => {
@@ -191,7 +187,9 @@ export default function TarikTunaiModal({
   };
 
   const formatRupiah = (num: number) => {
-    return 'Rp ' + Math.round(num).toLocaleString('id-ID');
+    const isNegative = num < 0;
+    const absVal = Math.round(Math.abs(num));
+    return (isNegative ? '-' : '') + 'Rp ' + absVal.toLocaleString('id-ID');
   };
 
   // Determine if a month is locked (already has a fully approved withdrawal covering the pagu limit)
@@ -305,7 +303,9 @@ export default function TarikTunaiModal({
               </div>
               <div className="flex justify-between text-slate-500">
                 <span>Sisa Kuota Pencairan Bulan Sebelumnya:</span>
-                <span className="text-emerald-700 font-bold">+{formatRupiah(sisaKuotaSebelumnya)}</span>
+                <span className={`${sisaKuotaSebelumnya >= 0 ? 'text-emerald-700' : 'text-rose-700'} font-bold`}>
+                  {sisaKuotaSebelumnya >= 0 ? '+' : ''}{formatRupiah(sisaKuotaSebelumnya)}
+                </span>
               </div>
               <div className="flex justify-between text-slate-500">
                 <span>Total Belanja Bulan {bulan}:</span>
@@ -317,7 +317,7 @@ export default function TarikTunaiModal({
               </div>
               <div className="flex justify-between border-t border-slate-200/60 pt-1.5 text-slate-600 font-extrabold">
                 <span>Sisa Kuota Pencairan:</span>
-                <span className="text-teal-700">{formatRupiah(availableLimit)}</span>
+                <span className={availableLimit >= 0 ? 'text-teal-700' : 'text-rose-700'}>{formatRupiah(availableLimit)}</span>
               </div>
             </div>
           )}
