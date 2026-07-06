@@ -324,58 +324,21 @@ export default function App() {
 
   // 2. Persist states in LocalStorage and server database whenever they change
   useEffect(() => {
-    if (schools.length > 0) {
-      localStorage.setItem('perbala_schools', JSON.stringify(schools));
-      if (!apiUrl && isInitialLoaded.current) {
-        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
-      }
-    }
-  }, [schools]);
+    if (!isInitialLoaded.current) return;
 
-  useEffect(() => {
-    if (operators.length > 0) {
-      localStorage.setItem('perbala_operators', JSON.stringify(operators));
-      if (!apiUrl && isInitialLoaded.current) {
-        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
-      }
-    }
-  }, [operators]);
+    // Save to LocalStorage
+    localStorage.setItem('perbala_schools', JSON.stringify(schools));
+    localStorage.setItem('perbala_operators', JSON.stringify(operators));
+    localStorage.setItem('perbala_monthly_pagu', JSON.stringify(monthlyPagu));
+    localStorage.setItem('perbala_rab', JSON.stringify(rabList));
+    localStorage.setItem('perbala_transactions', JSON.stringify(transactions));
+    localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
 
-  useEffect(() => {
-    if (monthlyPagu.length > 0) {
-      localStorage.setItem('perbala_monthly_pagu', JSON.stringify(monthlyPagu));
-      if (!apiUrl && isInitialLoaded.current) {
-        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
-      }
+    // Save to Express server config if we are in simulator/local mode
+    if (!apiUrl) {
+      saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
     }
-  }, [monthlyPagu]);
-
-  useEffect(() => {
-    if (rabList.length > 0) {
-      localStorage.setItem('perbala_rab', JSON.stringify(rabList));
-      if (!apiUrl && isInitialLoaded.current) {
-        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
-      }
-    }
-  }, [rabList]);
-
-  useEffect(() => {
-    if (transactions.length > 0) {
-      localStorage.setItem('perbala_transactions', JSON.stringify(transactions));
-      if (!apiUrl && isInitialLoaded.current) {
-        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
-      }
-    }
-  }, [transactions]);
-
-  useEffect(() => {
-    if (tarikTunaiList.length > 0) {
-      localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
-      if (!apiUrl && isInitialLoaded.current) {
-        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
-      }
-    }
-  }, [tarikTunaiList]);
+  }, [schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, apiUrl]);
 
   // Toast Helpers
   const addToast = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error') => {
@@ -552,75 +515,102 @@ export default function App() {
 
   // Silent automatic background database synchronization
   const syncDatabaseSilently = async () => {
-    if (!apiUrl) return;
-    setSyncStatus('syncing');
     try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        mode: 'cors',
-        body: JSON.stringify({ action: 'getData' })
-      });
-      const data = await response.json();
-      if (data.success) {
-        if (data.schools) {
-          setSchools(data.schools);
-          localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
+      if (apiUrl) {
+        setSyncStatus('syncing');
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          mode: 'cors',
+          body: JSON.stringify({ action: 'getData' })
+        });
+        const data = await response.json();
+        if (data.success) {
+          if (data.schools) {
+            setSchools(data.schools);
+            localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
+          }
+          if (data.users) {
+            setOperators(data.users);
+            localStorage.setItem('perbala_operators', JSON.stringify(data.users));
+          }
+          if (data.monthly_pagu) {
+            setMonthlyPagu(data.monthly_pagu);
+            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
+          }
+          if (data.rab) {
+            setRabList(data.rab);
+            localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
+          }
+          if (data.transactions) {
+            setTransactions(data.transactions);
+            localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
+          }
+          if (data.tarik_tunai) {
+            setTarikTunaiList(data.tarik_tunai);
+            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
+          }
+          
+          const incomingConfig = data.config || data.systemConfig || data.system_config;
+          if (incomingConfig) {
+            const loadedConfig = {
+              org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
+              logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
+              logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
+              deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
+              deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
+            };
+            setSystemConfig(loadedConfig);
+            localStorage.setItem('perbala_org_name', loadedConfig.org_name);
+            localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
+            localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
+            localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
+            localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
+          }
+          setSyncStatus('active');
+          setLastSyncTime(new Date());
+        } else {
+          setSyncStatus('error');
         }
-        if (data.users) {
-          setOperators(data.users);
-          localStorage.setItem('perbala_operators', JSON.stringify(data.users));
-        }
-        if (data.monthly_pagu) {
-          setMonthlyPagu(data.monthly_pagu);
-          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
-        }
-        if (data.rab) {
-          setRabList(data.rab);
-          localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
-        }
-        if (data.transactions) {
-          setTransactions(data.transactions);
-          localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
-        }
-        if (data.tarik_tunai) {
-          setTarikTunaiList(data.tarik_tunai);
-          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
-        }
-        
-        const incomingConfig = data.config || data.systemConfig || data.system_config;
-        if (incomingConfig) {
-          const loadedConfig = {
-            org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
-            logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
-            logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
-            deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
-            deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
-          };
-          setSystemConfig(loadedConfig);
-          localStorage.setItem('perbala_org_name', loadedConfig.org_name);
-          localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
-          localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
-          localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
-          localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
-        }
-        setSyncStatus('active');
-        setLastSyncTime(new Date());
       } else {
-        setSyncStatus('error');
+        // Simulator Mode: Sync shared database from our Express server to see edits from other devices
+        const dbRes = await fetch('/api/local-db');
+        const dbData = await dbRes.json();
+        if (dbData.success) {
+          setSchools(dbData.schools);
+          setOperators(dbData.operators);
+          setMonthlyPagu(dbData.monthlyPagu);
+          setRabList(dbData.rabList);
+          setTransactions(dbData.transactions);
+          setTarikTunaiList(dbData.tarikTunaiList);
+          if (dbData.systemConfig) {
+            setSystemConfig(dbData.systemConfig);
+          }
+          // Sync to LocalStorage
+          localStorage.setItem('perbala_schools', JSON.stringify(dbData.schools));
+          localStorage.setItem('perbala_operators', JSON.stringify(dbData.operators));
+          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbData.monthlyPagu));
+          localStorage.setItem('perbala_rab', JSON.stringify(dbData.rabList));
+          localStorage.setItem('perbala_transactions', JSON.stringify(dbData.transactions));
+          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbData.tarikTunaiList));
+        }
+        setSyncStatus('simulator');
       }
     } catch (err: any) {
-      setSyncStatus('error');
+      if (apiUrl) {
+        setSyncStatus('error');
+      } else {
+        setSyncStatus('simulator');
+      }
     }
   };
 
-  // 2.1. Periodic Real-Time Synchronization Polling (Runs every 10 seconds if connected to API)
+  // 2.1. Periodic Real-Time Synchronization Polling (Runs every 10 seconds for both WebApp API and Local DB Simulator)
   useEffect(() => {
-    if (!apiUrl) {
+    if (apiUrl) {
+      setSyncStatus('active');
+    } else {
       setSyncStatus('simulator');
-      return;
     }
-    
-    setSyncStatus('active');
     
     // Setup interval for silent polling
     const intervalId = setInterval(() => {
