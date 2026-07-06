@@ -525,8 +525,8 @@ export default function App() {
     .filter((t) => t.status === 'Selesai' && bulanTahap1.map(b => b.toLowerCase().trim()).includes(t.bulan.toLowerCase().trim()))
     .reduce((sum, curr) => sum + curr.nilai, 0);
 
-  // Realisasi Tahap 1: Penjumlahan dari alokasi bulan Jan-Jun dikurangi belanja buku, alat, siplah, dan tarik tunai Jan-Jun
-  const realisasiTahap1 = totalPaguT1 - (belanjaBukuT1 + belanjaAlatT1 + belanjaSiplahT1 + tarikTunaiT1);
+  // Realisasi Tahap 1: Penjumlahan belanja buku, alat, siplah, dan tarik tunai Jan-Jun (Total Pengeluaran)
+  const realisasiTahap1 = belanjaBukuT1 + belanjaAlatT1 + belanjaSiplahT1 + tarikTunaiT1;
 
   // Realisasi Belanja & Tarik Tunai Tahap 2 (Bulan Jul-Des)
   const belanjaBukuT2 = filteredTransactions
@@ -545,15 +545,15 @@ export default function App() {
     .filter((t) => t.status === 'Selesai' && bulanTahap2.map(b => b.toLowerCase().trim()).includes(t.bulan.toLowerCase().trim()))
     .reduce((sum, curr) => sum + curr.nilai, 0);
 
-  // Realisasi Tahap 2: Penjumlahan dari alokasi bulan Jul-Des dikurangi belanja buku, alat, siplah, dan tarik tunai Jul-Des
-  const realisasiTahap2 = totalPaguT2 - (belanjaBukuT2 + belanjaAlatT2 + belanjaSiplahT2 + tarikTunaiT2);
+  // Realisasi Tahap 2: Penjumlahan belanja buku, alat, siplah, dan tarik tunai Jul-Des (Total Pengeluaran)
+  const realisasiTahap2 = belanjaBukuT2 + belanjaAlatT2 + belanjaSiplahT2 + tarikTunaiT2;
 
-  // Realisasi Global: pagu tahunan dikurangi realisasi tahap 1 dan realisasi tahap 2
-  const realisasiGlobal = totalPaguTahunan - realisasiTahap1 - realisasiTahap2;
+  // Realisasi Global: Total pengeluaran Tahap 1 + Tahap 2
+  const realisasiGlobal = realisasiTahap1 + realisasiTahap2;
 
   // Persentase Berjalan (0-100%)
-  const realisasiTahap1Persen = totalPaguT1 > 0 ? Math.min(100, Math.max(0, ((totalPaguT1 - realisasiTahap1) / totalPaguT1) * 100)) : 0;
-  const realisasiTahap2Persen = totalPaguT2 > 0 ? Math.min(100, Math.max(0, ((totalPaguT2 - realisasiTahap2) / totalPaguT2) * 100)) : 0;
+  const realisasiTahap1Persen = totalPaguT1 > 0 ? Math.min(100, Math.max(0, (realisasiTahap1 / totalPaguT1) * 100)) : 0;
+  const realisasiTahap2Persen = totalPaguT2 > 0 ? Math.min(100, Math.max(0, (realisasiTahap2 / totalPaguT2) * 100)) : 0;
   const realisasiGlobalPersen = totalPaguTahunan > 0 ? Math.min(100, Math.max(0, (realisasiGlobal / totalPaguTahunan) * 100)) : 0;
 
   // Sisa Anggaran: Pagu Tahunan - Approved realisasi - Tarik selesai
@@ -1631,7 +1631,7 @@ export default function App() {
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-400 font-bold">
-                        <span>Realisasi T1: {formatRupiah(totalPaguT1 - realisasiTahap1)}</span>
+                        <span>Realisasi T1: {formatRupiah(realisasiTahap1)}</span>
                         <span>Pagu T1: {formatRupiah(totalPaguT1)}</span>
                       </div>
                     </div>
@@ -1648,7 +1648,7 @@ export default function App() {
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-400 font-bold">
-                        <span>Realisasi T2: {formatRupiah(totalPaguT2 - realisasiTahap2)}</span>
+                        <span>Realisasi T2: {formatRupiah(realisasiTahap2)}</span>
                         <span>Pagu T2: {formatRupiah(totalPaguT2)}</span>
                       </div>
                     </div>
