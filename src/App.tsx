@@ -141,6 +141,110 @@ export default function App() {
 
   const isInitialLoaded = useRef(false);
   const lastSyncedData = useRef<string | null>(null);
+  const firestoreUnsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Start real-time Firestore synchronization
+  const startFirestoreSync = (
+    currentSchools = schools,
+    currentOperators = operators,
+    currentMonthlyPagu = monthlyPagu,
+    currentRab = rabList,
+    currentTx = transactions,
+    currentTarik = tarikTunaiList,
+    currentConfig = systemConfig,
+    showToastOnSuccess = false
+  ) => {
+    if (firestoreUnsubscribeRef.current) {
+      try {
+        firestoreUnsubscribeRef.current();
+      } catch (e) {
+        console.error('Error unsubscribing:', e);
+      }
+      firestoreUnsubscribeRef.current = null;
+    }
+
+    setSyncStatus('syncing');
+
+    const docRef = doc(db, 'app_data', 'database');
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        
+        const dbState = {
+          schools: data.schools || initialSchools,
+          operators: data.operators || initialOperators,
+          monthlyPagu: data.monthlyPagu || initialMonthlyPagu,
+          rabList: data.rabList || initialRAB,
+          transactions: data.transactions || initialTransactions,
+          tarikTunaiList: data.tarikTunaiList || initialTarikTunai,
+          systemConfig: data.systemConfig || defaultSystemConfig
+        };
+        const dbStateStr = JSON.stringify(dbState);
+        lastSyncedData.current = dbStateStr;
+
+        // Update React states
+        setSchools(dbState.schools);
+        setOperators(dbState.operators);
+        setMonthlyPagu(dbState.monthlyPagu);
+        setRabList(dbState.rabList);
+        setTransactions(dbState.transactions);
+        setTarikTunaiList(dbState.tarikTunaiList);
+        setSystemConfig(dbState.systemConfig);
+
+        // Update LocalStorage
+        localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
+        localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
+        localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
+        localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
+        localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
+        localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
+        localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
+        localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
+        localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
+        localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
+        localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
+
+        setSyncStatus('active');
+        setLastSyncTime(new Date());
+        isInitialLoaded.current = true;
+
+        if (showToastOnSuccess) {
+          addToast('Sinkronisasi Sukses', 'Basis data berhasil disinkronkan dengan server awan.', 'success');
+        }
+      } else {
+        // Create initial document on Firestore if not present
+        const defaultDb = {
+          schools: currentSchools,
+          operators: currentOperators,
+          monthlyPagu: currentMonthlyPagu,
+          rabList: currentRab,
+          transactions: currentTx,
+          tarikTunaiList: currentTarik,
+          systemConfig: currentConfig
+        };
+        
+        lastSyncedData.current = JSON.stringify(defaultDb);
+        setDoc(docRef, defaultDb)
+          .then(() => {
+            setSyncStatus('active');
+            setLastSyncTime(new Date());
+            isInitialLoaded.current = true;
+            if (showToastOnSuccess) {
+              addToast('Sinkronisasi Sukses', 'Basis data berhasil diinisialisasi dan disinkronkan dengan server awan.', 'success');
+            }
+          })
+          .catch((err) => {
+            handleFirestoreError(err, OperationType.WRITE, 'app_data/database');
+            setSyncStatus('error');
+          });
+      }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'app_data/database');
+      setSyncStatus('error');
+    });
+
+    firestoreUnsubscribeRef.current = unsubscribe;
+  };
 
   // Sync simulated/local database state to the Express server as backup
   const saveDatabaseToServer = async (
@@ -202,81 +306,14 @@ export default function App() {
     };
     setSystemConfig(savedConfig);
 
-    setSyncStatus('syncing');
-
     // 1.2 Subscribe to real-time updates from Firestore
-    const docRef = doc(db, 'app_data', 'database');
-    const unsubscribe = onSnapshot(docRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        
-        const dbState = {
-          schools: data.schools || initialSchools,
-          operators: data.operators || initialOperators,
-          monthlyPagu: data.monthlyPagu || initialMonthlyPagu,
-          rabList: data.rabList || initialRAB,
-          transactions: data.transactions || initialTransactions,
-          tarikTunaiList: data.tarikTunaiList || initialTarikTunai,
-          systemConfig: data.systemConfig || defaultSystemConfig
-        };
-        const dbStateStr = JSON.stringify(dbState);
-        lastSyncedData.current = dbStateStr;
+    startFirestoreSync(localSchools, localOperators, localMonthlyPagu, localRab, localTx, localTarik, savedConfig, false);
 
-        // Update React states
-        setSchools(dbState.schools);
-        setOperators(dbState.operators);
-        setMonthlyPagu(dbState.monthlyPagu);
-        setRabList(dbState.rabList);
-        setTransactions(dbState.transactions);
-        setTarikTunaiList(dbState.tarikTunaiList);
-        setSystemConfig(dbState.systemConfig);
-
-        // Update LocalStorage
-        localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
-        localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
-        localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
-        localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
-        localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
-        localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
-        localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
-        localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
-        localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
-        localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
-        localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
-
-        setSyncStatus('active');
-        setLastSyncTime(new Date());
-        isInitialLoaded.current = true;
-      } else {
-        // Create initial document on Firestore if not present
-        const defaultDb = {
-          schools: localSchools,
-          operators: localOperators,
-          monthlyPagu: localMonthlyPagu,
-          rabList: localRab,
-          transactions: localTx,
-          tarikTunaiList: localTarik,
-          systemConfig: savedConfig
-        };
-        
-        lastSyncedData.current = JSON.stringify(defaultDb);
-        setDoc(docRef, defaultDb)
-          .then(() => {
-            setSyncStatus('active');
-            setLastSyncTime(new Date());
-            isInitialLoaded.current = true;
-          })
-          .catch((err) => {
-            handleFirestoreError(err, OperationType.WRITE, 'app_data/database');
-            setSyncStatus('error');
-          });
+    return () => {
+      if (firestoreUnsubscribeRef.current) {
+        firestoreUnsubscribeRef.current();
       }
-    }, (err) => {
-      handleFirestoreError(err, OperationType.GET, 'app_data/database');
-      setSyncStatus('error');
-    });
-
-    return () => unsubscribe();
+    };
   }, []);
 
   // 2. Persist states in LocalStorage and Firestore whenever they change
@@ -444,38 +481,14 @@ export default function App() {
   // Sync / Load database data from Cloud Server
   const loadDatabaseFromApi = async () => {
     setIsLoadingData(true);
-    setSyncStatus('syncing');
+    addToast('Menghubungkan', 'Mencoba menghubungkan kembali ke basis data awan...', 'info');
     try {
-      const response = await fetch('/api/local-db');
-      const data = await response.json();
+      startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, true);
       setIsLoadingData(false);
-      if (data.success) {
-        if (data.schools) setSchools(data.schools);
-        if (data.operators) setOperators(data.operators);
-        if (data.monthlyPagu) setMonthlyPagu(data.monthlyPagu);
-        if (data.rabList) setRabList(data.rabList);
-        if (data.transactions) setTransactions(data.transactions);
-        if (data.tarikTunaiList) setTarikTunaiList(data.tarikTunaiList);
-        if (data.systemConfig) {
-          setSystemConfig(data.systemConfig);
-          localStorage.setItem('perbala_org_name', data.systemConfig.org_name);
-          localStorage.setItem('perbala_logo_preset', data.systemConfig.logo_preset);
-          localStorage.setItem('perbala_logo_url', data.systemConfig.logo_url || '');
-          localStorage.setItem('perbala_deadline_t1', data.systemConfig.deadline_t1);
-          localStorage.setItem('perbala_deadline_t2', data.systemConfig.deadline_t2);
-        }
-        
-        setSyncStatus('active');
-        setLastSyncTime(new Date());
-        addToast('Sinkronisasi Sukses', 'Database berhasil disinkronkan dengan server awan.', 'success');
-      } else {
-        setSyncStatus('error');
-        addToast('Gagal Sinkronisasi', 'Gagal memuat data dari server.', 'error');
-      }
     } catch (err: any) {
       setIsLoadingData(false);
       setSyncStatus('error');
-      addToast('Koneksi Gagal', 'Gagal menghubungi server awan. Menggunakan database lokal.', 'warning');
+      addToast('Koneksi Gagal', 'Gagal menghubungkan ke basis data awan Firestore.', 'error');
     }
   };
 
