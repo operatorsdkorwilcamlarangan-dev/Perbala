@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   School,
   Operator,
@@ -94,6 +94,14 @@ export default function App() {
   const [apiUrl, setApiUrl] = useState(() => {
     return localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
   });
+  const [syncStatus, setSyncStatus] = useState<'active' | 'simulator' | 'error' | 'syncing'>(() => {
+    const url = localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
+    return url ? 'active' : 'simulator';
+  });
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(() => {
+    const url = localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
+    return url ? new Date() : null;
+  });
 
   // App UI Navigation & Filters
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -139,116 +147,234 @@ export default function App() {
 
   const [tempApiUrl, setTempApiUrl] = useState('');
 
+  const isInitialLoaded = useRef(false);
+
+  // Sync simulated/local database state to the Express server
+  const saveDatabaseToServer = async (
+    currentSchools = schools,
+    currentOperators = operators,
+    currentMonthlyPagu = monthlyPagu,
+    currentRab = rabList,
+    currentTx = transactions,
+    currentTarik = tarikTunaiList,
+    currentConfig = systemConfig
+  ) => {
+    if (!isInitialLoaded.current) return;
+    try {
+      await fetch('/api/local-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schools: currentSchools,
+          operators: currentOperators,
+          monthlyPagu: currentMonthlyPagu,
+          rabList: currentRab,
+          transactions: currentTx,
+          tarikTunaiList: currentTarik,
+          systemConfig: currentConfig
+        })
+      });
+    } catch (err) {
+      console.error('Failed to auto-save local database state to server:', err);
+    }
+  };
+
   // 1. Initial State Load on mount
   useEffect(() => {
-    // API URL Load
-    const savedApiUrl = localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
-    setApiUrl(savedApiUrl);
-    setTempApiUrl(savedApiUrl);
+    const initializeApp = async () => {
+      // 1.1 First load from LocalStorage as instantaneous fallback
+      const loadState = <T,>(key: string, fallback: T): T => {
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : fallback;
+      };
 
-    // Initial load from LocalStorage or fallback to mock
-    const loadState = <T,>(key: string, fallback: T): T => {
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : fallback;
-    };
+      setSchools(loadState('perbala_schools', initialSchools));
+      setOperators(loadState('perbala_operators', initialOperators));
+      setMonthlyPagu(loadState('perbala_monthly_pagu', initialMonthlyPagu));
+      setRabList(loadState('perbala_rab', initialRAB));
+      setTransactions(loadState('perbala_transactions', initialTransactions));
+      setTarikTunaiList(loadState('perbala_tarik_tunai', initialTarikTunai));
 
-    setSchools(loadState('perbala_schools', initialSchools));
-    setOperators(loadState('perbala_operators', initialOperators));
-    setMonthlyPagu(loadState('perbala_monthly_pagu', initialMonthlyPagu));
-    setRabList(loadState('perbala_rab', initialRAB));
-    setTransactions(loadState('perbala_transactions', initialTransactions));
-    setTarikTunaiList(loadState('perbala_tarik_tunai', initialTarikTunai));
-    
-    // Config Load
-    const savedConfig: SystemConfig = {
-      org_name: localStorage.getItem('perbala_org_name') || defaultSystemConfig.org_name,
-      logo_preset: localStorage.getItem('perbala_logo_preset') || defaultSystemConfig.logo_preset,
-      logo_url: localStorage.getItem('perbala_logo_url') || defaultSystemConfig.logo_url,
-      deadline_t1: localStorage.getItem('perbala_deadline_t1') || defaultSystemConfig.deadline_t1,
-      deadline_t2: localStorage.getItem('perbala_deadline_t2') || defaultSystemConfig.deadline_t2,
-    };
-    setSystemConfig(savedConfig);
+      const savedConfig: SystemConfig = {
+        org_name: localStorage.getItem('perbala_org_name') || defaultSystemConfig.org_name,
+        logo_preset: localStorage.getItem('perbala_logo_preset') || defaultSystemConfig.logo_preset,
+        logo_url: localStorage.getItem('perbala_logo_url') || defaultSystemConfig.logo_url,
+        deadline_t1: localStorage.getItem('perbala_deadline_t1') || defaultSystemConfig.deadline_t1,
+        deadline_t2: localStorage.getItem('perbala_deadline_t2') || defaultSystemConfig.deadline_t2,
+      };
+      setSystemConfig(savedConfig);
 
-    // Background fetch to sync latest database and configuration if API URL is set
-    if (savedApiUrl) {
-      fetch(savedApiUrl, {
-        method: 'POST',
-        mode: 'cors',
-        body: JSON.stringify({ action: 'getData' })
-      })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          if (data.schools) {
-            setSchools(data.schools);
-            localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
+      try {
+        // 1.2 Fetch server-wide configurations
+        const configRes = await fetch('/api/config');
+        const configData = await configRes.json();
+
+        let activeApiUrl = '';
+        if (configData.success) {
+          activeApiUrl = configData.apiUrl || '';
+          setApiUrl(activeApiUrl);
+          setTempApiUrl(activeApiUrl);
+          if (activeApiUrl) {
+            localStorage.setItem('perbala_api_url', activeApiUrl);
+          } else {
+            localStorage.removeItem('perbala_api_url');
           }
-          if (data.users) {
-            setOperators(data.users);
-            localStorage.setItem('perbala_operators', JSON.stringify(data.users));
-          }
-          if (data.monthly_pagu) {
-            setMonthlyPagu(data.monthly_pagu);
-            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
-          }
-          if (data.rab) {
-            setRabList(data.rab);
-            localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
-          }
-          if (data.transactions) {
-            setTransactions(data.transactions);
-            localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
-          }
-          if (data.tarik_tunai) {
-            setTarikTunaiList(data.tarik_tunai);
-            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
-          }
-          
-          const incomingConfig = data.config || data.systemConfig || data.system_config;
-          if (incomingConfig) {
-            const loadedConfig = {
-              org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
-              logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
-              logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
-              deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
-              deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
-            };
-            setSystemConfig(loadedConfig);
-            localStorage.setItem('perbala_org_name', loadedConfig.org_name);
-            localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
-            localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
-            localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
-            localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
+
+          if (configData.systemConfig) {
+            const serverConfig = configData.systemConfig;
+            setSystemConfig(serverConfig);
+            localStorage.setItem('perbala_org_name', serverConfig.org_name);
+            localStorage.setItem('perbala_logo_preset', serverConfig.logo_preset);
+            localStorage.setItem('perbala_logo_url', serverConfig.logo_url || '');
+            localStorage.setItem('perbala_deadline_t1', serverConfig.deadline_t1);
+            localStorage.setItem('perbala_deadline_t2', serverConfig.deadline_t2);
           }
         }
-      })
-      .catch(() => {});
-    }
+
+        // 1.3 Fetch database depending on Mode
+        if (activeApiUrl) {
+          // Connected Mode: Load from Google Sheets Apps Script WebApp
+          setSyncStatus('syncing');
+          const response = await fetch(activeApiUrl, {
+            method: 'POST',
+            mode: 'cors',
+            body: JSON.stringify({ action: 'getData' })
+          });
+          const data = await response.json();
+          if (data.success) {
+            if (data.schools) {
+              setSchools(data.schools);
+              localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
+            }
+            if (data.users) {
+              setOperators(data.users);
+              localStorage.setItem('perbala_operators', JSON.stringify(data.users));
+            }
+            if (data.monthly_pagu) {
+              setMonthlyPagu(data.monthly_pagu);
+              localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
+            }
+            if (data.rab) {
+              setRabList(data.rab);
+              localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
+            }
+            if (data.transactions) {
+              setTransactions(data.transactions);
+              localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
+            }
+            if (data.tarik_tunai) {
+              setTarikTunaiList(data.tarik_tunai);
+              localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
+            }
+
+            const incomingConfig = data.config || data.systemConfig || data.system_config;
+            if (incomingConfig) {
+              const loadedConfig = {
+                org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
+                logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
+                logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
+                deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
+                deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
+              };
+              setSystemConfig(loadedConfig);
+              localStorage.setItem('perbala_org_name', loadedConfig.org_name);
+              localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
+              localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
+              localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
+              localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
+            }
+            setSyncStatus('active');
+            setLastSyncTime(new Date());
+          } else {
+            setSyncStatus('error');
+          }
+        } else {
+          // Simulator Mode: Load shared database from our Express server
+          const dbRes = await fetch('/api/local-db');
+          const dbData = await dbRes.json();
+          if (dbData.success) {
+            setSchools(dbData.schools);
+            setOperators(dbData.operators);
+            setMonthlyPagu(dbData.monthlyPagu);
+            setRabList(dbData.rabList);
+            setTransactions(dbData.transactions);
+            setTarikTunaiList(dbData.tarikTunaiList);
+            if (dbData.systemConfig) {
+              setSystemConfig(dbData.systemConfig);
+            }
+            // Sync to LocalStorage
+            localStorage.setItem('perbala_schools', JSON.stringify(dbData.schools));
+            localStorage.setItem('perbala_operators', JSON.stringify(dbData.operators));
+            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbData.monthlyPagu));
+            localStorage.setItem('perbala_rab', JSON.stringify(dbData.rabList));
+            localStorage.setItem('perbala_transactions', JSON.stringify(dbData.transactions));
+            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbData.tarikTunaiList));
+          }
+          setSyncStatus('simulator');
+        }
+      } catch (err) {
+        console.error('Error during initial server-wide configuration fetch:', err);
+      } finally {
+        isInitialLoaded.current = true;
+      }
+    };
+
+    initializeApp();
   }, []);
 
-  // 2. Persist states in LocalStorage whenever they change
+  // 2. Persist states in LocalStorage and server database whenever they change
   useEffect(() => {
-    if (schools.length > 0) localStorage.setItem('perbala_schools', JSON.stringify(schools));
+    if (schools.length > 0) {
+      localStorage.setItem('perbala_schools', JSON.stringify(schools));
+      if (!apiUrl && isInitialLoaded.current) {
+        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+      }
+    }
   }, [schools]);
 
   useEffect(() => {
-    if (operators.length > 0) localStorage.setItem('perbala_operators', JSON.stringify(operators));
+    if (operators.length > 0) {
+      localStorage.setItem('perbala_operators', JSON.stringify(operators));
+      if (!apiUrl && isInitialLoaded.current) {
+        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+      }
+    }
   }, [operators]);
 
   useEffect(() => {
-    if (monthlyPagu.length > 0) localStorage.setItem('perbala_monthly_pagu', JSON.stringify(monthlyPagu));
+    if (monthlyPagu.length > 0) {
+      localStorage.setItem('perbala_monthly_pagu', JSON.stringify(monthlyPagu));
+      if (!apiUrl && isInitialLoaded.current) {
+        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+      }
+    }
   }, [monthlyPagu]);
 
   useEffect(() => {
-    if (rabList.length > 0) localStorage.setItem('perbala_rab', JSON.stringify(rabList));
+    if (rabList.length > 0) {
+      localStorage.setItem('perbala_rab', JSON.stringify(rabList));
+      if (!apiUrl && isInitialLoaded.current) {
+        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+      }
+    }
   }, [rabList]);
 
   useEffect(() => {
-    if (transactions.length > 0) localStorage.setItem('perbala_transactions', JSON.stringify(transactions));
+    if (transactions.length > 0) {
+      localStorage.setItem('perbala_transactions', JSON.stringify(transactions));
+      if (!apiUrl && isInitialLoaded.current) {
+        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+      }
+    }
   }, [transactions]);
 
   useEffect(() => {
-    if (tarikTunaiList.length > 0) localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
+    if (tarikTunaiList.length > 0) {
+      localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
+      if (!apiUrl && isInitialLoaded.current) {
+        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+      }
+    }
   }, [tarikTunaiList]);
 
   // Toast Helpers
@@ -376,6 +502,7 @@ export default function App() {
       return;
     }
     setIsLoadingData(true);
+    setSyncStatus('syncing');
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -409,15 +536,99 @@ export default function App() {
           localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
         }
         
+        setSyncStatus('active');
+        setLastSyncTime(new Date());
         addToast('Sinkronisasi Sukses', 'Seluruh database disinkronkan dengan Google Sheets.', 'success');
       } else {
+        setSyncStatus('error');
         addToast('Gagal Sinkronisasi', data.message || 'Respons API tidak sukses.', 'error');
       }
     } catch (err: any) {
       setIsLoadingData(false);
+      setSyncStatus('error');
       addToast('Koneksi Gagal', 'Gagal menghubungi server Apps Script. Menggunakan database lokal.', 'warning');
     }
   };
+
+  // Silent automatic background database synchronization
+  const syncDatabaseSilently = async () => {
+    if (!apiUrl) return;
+    setSyncStatus('syncing');
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify({ action: 'getData' })
+      });
+      const data = await response.json();
+      if (data.success) {
+        if (data.schools) {
+          setSchools(data.schools);
+          localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
+        }
+        if (data.users) {
+          setOperators(data.users);
+          localStorage.setItem('perbala_operators', JSON.stringify(data.users));
+        }
+        if (data.monthly_pagu) {
+          setMonthlyPagu(data.monthly_pagu);
+          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
+        }
+        if (data.rab) {
+          setRabList(data.rab);
+          localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
+        }
+        if (data.transactions) {
+          setTransactions(data.transactions);
+          localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
+        }
+        if (data.tarik_tunai) {
+          setTarikTunaiList(data.tarik_tunai);
+          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
+        }
+        
+        const incomingConfig = data.config || data.systemConfig || data.system_config;
+        if (incomingConfig) {
+          const loadedConfig = {
+            org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
+            logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
+            logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
+            deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
+            deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
+          };
+          setSystemConfig(loadedConfig);
+          localStorage.setItem('perbala_org_name', loadedConfig.org_name);
+          localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
+          localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
+          localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
+          localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
+        }
+        setSyncStatus('active');
+        setLastSyncTime(new Date());
+      } else {
+        setSyncStatus('error');
+      }
+    } catch (err: any) {
+      setSyncStatus('error');
+    }
+  };
+
+  // 2.1. Periodic Real-Time Synchronization Polling (Runs every 10 seconds if connected to API)
+  useEffect(() => {
+    if (!apiUrl) {
+      setSyncStatus('simulator');
+      return;
+    }
+    
+    setSyncStatus('active');
+    
+    // Setup interval for silent polling
+    const intervalId = setInterval(() => {
+      syncDatabaseSilently();
+    }, 10000); // 10 seconds
+    
+    return () => clearInterval(intervalId);
+  }, [apiUrl]);
 
   // Perform Logged Activity to WebApp if connected
   const logActivity = async (actionName: string, detail: string) => {
@@ -609,6 +820,17 @@ export default function App() {
     localStorage.setItem('perbala_deadline_t2', config.deadline_t2);
     setSystemConfig(config);
 
+    // Save to Express server config
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemConfig: config })
+      });
+    } catch (err) {
+      console.error('Failed to sync system config to server:', err);
+    }
+
     if (apiUrl) {
       try {
         await fetch(apiUrl, {
@@ -622,7 +844,7 @@ export default function App() {
     setCurrentTab('dashboard');
   };
 
-  const handleResetConfig = () => {
+  const handleResetConfig = async () => {
     localStorage.removeItem('perbala_org_name');
     localStorage.removeItem('perbala_logo_preset');
     localStorage.removeItem('perbala_logo_url');
@@ -630,6 +852,18 @@ export default function App() {
     localStorage.removeItem('perbala_deadline_t2');
 
     setSystemConfig(defaultSystemConfig);
+
+    // Save default system config to Express server config
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemConfig: defaultSystemConfig })
+      });
+    } catch (err) {
+      console.error('Failed to reset system config on server:', err);
+    }
+
     addToast('Reset Setelan', 'Pengaturan profile dikembalikan ke default.', 'info');
   };
 
@@ -1142,12 +1376,16 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <Header
           currentTab={currentTab}
-          currentUser={currentUser}
+          currentUser={currentUser!}
           schools={schools}
           selectedSchoolFilter={schoolFilter}
           onSchoolFilterChange={setSchoolFilter}
           onLogout={handleLogout}
           systemName={systemConfig.org_name}
+          apiUrl={apiUrl}
+          syncStatus={syncStatus}
+          lastSyncTime={lastSyncTime}
+          onManualSync={loadDatabaseFromApi}
         />
 
         {/* View Renderings */}
@@ -2810,11 +3048,23 @@ export default function App() {
             </div>
             <div className="flex gap-2 pt-2 border-t border-slate-100">
               <button
-                onClick={() => {
+                onClick={async () => {
                   setApiUrl(tempApiUrl);
                   localStorage.setItem('perbala_api_url', tempApiUrl);
                   setIsApiModalOpen(false);
                   addToast('API Tersimpan', 'Tautan API Google Sheets berhasil diperbarui.', 'success');
+                  
+                  // Persist API URL to central Express server
+                  try {
+                    await fetch('/api/config', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ apiUrl: tempApiUrl })
+                    });
+                  } catch (err) {
+                    console.error('Failed to save API URL on central server:', err);
+                  }
+
                   // Trigger load
                   if (tempApiUrl) {
                     setTimeout(() => loadDatabaseFromApi(), 200);
