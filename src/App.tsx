@@ -1180,9 +1180,9 @@ export default function App() {
             <h2 className="text-2xl font-black text-slate-800 tracking-wide uppercase line-clamp-2">
               {systemConfig.org_name || 'MONITORING PERBALA'}
             </h2>
-            <p className="text-xs text-slate-500 mt-1">Dinas Monitoring & Evaluasi Penyerapan Dana Bantuan Sekolah</p>
+            <p className="text-xs text-slate-500 mt-1">Perhimpunan Operator Bendahara ARKAS Larangan</p>
             <span className="inline-block mt-3 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-black tracking-widest uppercase">
-              SISTEM BOSP MANDIRI
+              SISTEM BOSP
             </span>
           </div>
 
@@ -2952,17 +2952,6 @@ export default function App() {
 
   // Helper local states for modal open/close to maintain naming
   function setIsPaguBulanOpen(isOpen: boolean) {
-    setIsPaguBulanOpenState(isOpen);
+    setIsPaguBulanModalOpen(isOpen);
   }
 }
-
-// Rename binding helper to bypass scope duplication check
-var setIsPaguBulanOpenState: any;
-App.prototype = {
-  get setIsPaguBulanOpen() {
-    return setIsPaguBulanOpenState;
-  },
-  set setIsPaguBulanOpen(v) {
-    setIsPaguBulanOpenState = v;
-  }
-};

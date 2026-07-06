@@ -125,7 +125,9 @@ export default function UserModal({ isOpen, initialData, schools, onSubmit, onCa
                   const val = e.target.value as 'Admin' | 'Anggota';
                   setRole(val);
                   if (val === 'Admin') {
-                    setInstansi('Dinas Pendidikan Kab. Sejahtera');
+                    if (!instansi || instansi.trim() === '') {
+                      setInstansi('Dinas Pendidikan Kab. Sejahtera');
+                    }
                   }
                 }}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-purple-500 font-bold"
@@ -139,9 +141,11 @@ export default function UserModal({ isOpen, initialData, schools, onSubmit, onCa
               {role === 'Admin' ? (
                 <input
                   type="text"
-                  disabled
-                  value="Dinas Pendidikan Kab. Sejahtera"
-                  className="w-full bg-slate-100 border border-slate-200 rounded-xl p-3 text-slate-500 cursor-not-allowed font-semibold"
+                  required
+                  value={instansi}
+                  onChange={(e) => setInstansi(e.target.value)}
+                  placeholder="Contoh: Dinas Pendidikan"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-purple-500 font-semibold"
                 />
               ) : (
                 <select
