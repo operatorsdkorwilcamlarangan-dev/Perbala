@@ -142,6 +142,7 @@ export default function App() {
   const isInitialLoaded = useRef(false);
   const lastSyncedData = useRef<string | null>(null);
   const firestoreUnsubscribeRef = useRef<(() => void) | null>(null);
+  const retryTimeoutRef = useRef<any>(null);
 
   // Start real-time Firestore synchronization
   const startFirestoreSync = (
@@ -152,7 +153,8 @@ export default function App() {
     currentTx = transactions,
     currentTarik = tarikTunaiList,
     currentConfig = systemConfig,
-    showToastOnSuccess = false
+    showToastOnSuccess = false,
+    retryCount = 0
   ) => {
     if (firestoreUnsubscribeRef.current) {
       try {
@@ -163,10 +165,21 @@ export default function App() {
       firestoreUnsubscribeRef.current = null;
     }
 
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
     setSyncStatus('syncing');
 
     const docRef = doc(db, 'app_data', 'database');
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      // Clear any pending retry timeouts on successful connection
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+
       if (snapshot.exists()) {
         const data = snapshot.data();
         
@@ -234,13 +247,31 @@ export default function App() {
             }
           })
           .catch((err) => {
-            handleFirestoreError(err, OperationType.WRITE, 'app_data/database');
+            console.error('Error writing initial document:', err);
             setSyncStatus('error');
           });
       }
     }, (err) => {
-      handleFirestoreError(err, OperationType.GET, 'app_data/database');
+      console.warn('Firestore subscription connection issue/error:', err);
       setSyncStatus('error');
+      
+      // Auto-retry with exponential backoff delay starting at 5s, max 30s
+      const nextDelay = Math.min(1000 * Math.pow(2, Math.min(retryCount, 6)) + 4000, 30000);
+      console.log(`Scheduling automatic synchronization retry in ${nextDelay / 1000}s (Retry #${retryCount + 1})...`);
+      
+      retryTimeoutRef.current = setTimeout(() => {
+        startFirestoreSync(
+          currentSchools,
+          currentOperators,
+          currentMonthlyPagu,
+          currentRab,
+          currentTx,
+          currentTarik,
+          currentConfig,
+          false,
+          retryCount + 1
+        );
+      }, nextDelay);
     });
 
     firestoreUnsubscribeRef.current = unsubscribe;
@@ -313,14 +344,17 @@ export default function App() {
       if (firestoreUnsubscribeRef.current) {
         firestoreUnsubscribeRef.current();
       }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
     };
   }, []);
 
-  // 2. Persist states in LocalStorage and Firestore whenever they change
+  // 2. Persist states in LocalStorage and Firestore whenever they change (debounced)
   useEffect(() => {
     if (!isInitialLoaded.current) return;
 
-    // Save to LocalStorage
+    // Save to LocalStorage immediately for instant local performance
     localStorage.setItem('perbala_schools', JSON.stringify(schools));
     localStorage.setItem('perbala_operators', JSON.stringify(operators));
     localStorage.setItem('perbala_monthly_pagu', JSON.stringify(monthlyPagu));
@@ -339,25 +373,34 @@ export default function App() {
     };
     const currentDbStateStr = JSON.stringify(currentDbState);
 
-    // Only save to cloud if current state is different from the last known synced data
-    if (currentDbStateStr !== lastSyncedData.current) {
-      lastSyncedData.current = currentDbStateStr;
-      
-      setSyncStatus('syncing');
-      const docRef = doc(db, 'app_data', 'database');
-      setDoc(docRef, currentDbState)
-        .then(() => {
-          setSyncStatus('active');
-          setLastSyncTime(new Date());
-        })
-        .catch((err) => {
-          console.error('Failed to save to Firestore:', err);
-          setSyncStatus('error');
-        });
-
-      // Maintain server backup in database.json
-      saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+    // Skip if identical to what we last synced (to prevent write loops)
+    if (currentDbStateStr === lastSyncedData.current) {
+      return;
     }
+
+    // Debounce cloud persistence by 1.5 seconds to prevent rate limiting & save collision issues
+    const debounceTimer = setTimeout(() => {
+      if (currentDbStateStr !== lastSyncedData.current) {
+        lastSyncedData.current = currentDbStateStr;
+        
+        setSyncStatus('syncing');
+        const docRef = doc(db, 'app_data', 'database');
+        setDoc(docRef, currentDbState)
+          .then(() => {
+            setSyncStatus('active');
+            setLastSyncTime(new Date());
+          })
+          .catch((err) => {
+            console.error('Failed to save to Firestore:', err);
+            setSyncStatus('error');
+          });
+
+        // Maintain server backup in database.json
+        saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+      }
+    }, 1500);
+
+    return () => clearTimeout(debounceTimer);
   }, [schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig]);
 
   // Toast Helpers
