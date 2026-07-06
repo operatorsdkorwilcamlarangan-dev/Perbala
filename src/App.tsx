@@ -91,7 +91,9 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [tarikTunaiList, setTarikTunaiList] = useState<TarikTunai[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(defaultSystemConfig);
-  const [apiUrl, setApiUrl] = useState('');
+  const [apiUrl, setApiUrl] = useState(() => {
+    return localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
+  });
 
   // App UI Navigation & Filters
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -140,7 +142,7 @@ export default function App() {
   // 1. Initial State Load on mount
   useEffect(() => {
     // API URL Load
-    const savedApiUrl = localStorage.getItem('perbala_api_url') || '';
+    const savedApiUrl = localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
     setApiUrl(savedApiUrl);
     setTempApiUrl(savedApiUrl);
 
@@ -166,6 +168,62 @@ export default function App() {
       deadline_t2: localStorage.getItem('perbala_deadline_t2') || defaultSystemConfig.deadline_t2,
     };
     setSystemConfig(savedConfig);
+
+    // Background fetch to sync latest database and configuration if API URL is set
+    if (savedApiUrl) {
+      fetch(savedApiUrl, {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify({ action: 'getData' })
+      })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.schools) {
+            setSchools(data.schools);
+            localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
+          }
+          if (data.users) {
+            setOperators(data.users);
+            localStorage.setItem('perbala_operators', JSON.stringify(data.users));
+          }
+          if (data.monthly_pagu) {
+            setMonthlyPagu(data.monthly_pagu);
+            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
+          }
+          if (data.rab) {
+            setRabList(data.rab);
+            localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
+          }
+          if (data.transactions) {
+            setTransactions(data.transactions);
+            localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
+          }
+          if (data.tarik_tunai) {
+            setTarikTunaiList(data.tarik_tunai);
+            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
+          }
+          
+          const incomingConfig = data.config || data.systemConfig || data.system_config;
+          if (incomingConfig) {
+            const loadedConfig = {
+              org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
+              logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
+              logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
+              deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
+              deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
+            };
+            setSystemConfig(loadedConfig);
+            localStorage.setItem('perbala_org_name', loadedConfig.org_name);
+            localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
+            localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
+            localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
+            localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
+          }
+        }
+      })
+      .catch(() => {});
+    }
   }, []);
 
   // 2. Persist states in LocalStorage whenever they change
@@ -333,6 +391,23 @@ export default function App() {
         if (data.rab) setRabList(data.rab);
         if (data.transactions) setTransactions(data.transactions);
         if (data.tarik_tunai) setTarikTunaiList(data.tarik_tunai);
+        
+        const incomingConfig = data.config || data.systemConfig || data.system_config;
+        if (incomingConfig) {
+          const loadedConfig = {
+            org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
+            logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
+            logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
+            deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
+            deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
+          };
+          setSystemConfig(loadedConfig);
+          localStorage.setItem('perbala_org_name', loadedConfig.org_name);
+          localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
+          localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
+          localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
+          localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
+        }
         
         addToast('Sinkronisasi Sukses', 'Seluruh database disinkronkan dengan Google Sheets.', 'success');
       } else {
