@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Operator } from '../types';
+import { Operator, SystemConfig } from '../types';
 import {
   LayoutDashboard,
   School,
@@ -38,6 +38,7 @@ interface SidebarProps {
   pendingTarikCount: number;
   onOpenApiModal: () => void;
   hasApiUrl: boolean;
+  systemConfig: SystemConfig;
 }
 
 export default function Sidebar({
@@ -48,7 +49,8 @@ export default function Sidebar({
   onRoleSwitch,
   pendingTarikCount,
   onOpenApiModal,
-  hasApiUrl
+  hasApiUrl,
+  systemConfig
 }: SidebarProps) {
   const isSelected = (tabId: string) => currentTab === tabId;
 
@@ -73,11 +75,23 @@ export default function Sidebar({
       {/* Brand Header */}
       <div className="p-6 flex items-center gap-3 border-b border-white/5">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20 text-white shrink-0 overflow-hidden">
-          <Wallet className="w-5 h-5" />
+          {systemConfig.logo_preset === 'custom' && systemConfig.logo_url ? (
+            <img src={systemConfig.logo_url} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          ) : systemConfig.logo_preset === 'preset-school' ? (
+            <School className="w-5 h-5" />
+          ) : systemConfig.logo_preset === 'preset-coins' ? (
+            <Coins className="w-5 h-5" />
+          ) : systemConfig.logo_preset === 'preset-book' ? (
+            <BookOpen className="w-5 h-5" />
+          ) : (
+            <Wallet className="w-5 h-5" />
+          )}
         </div>
         <div>
-          <h1 className="font-black text-sm tracking-wider text-white leading-tight">MONITORING PERBALA</h1>
-          <span className="text-[9px] text-purple-300 font-bold uppercase tracking-widest block">SISTEM BOSP</span>
+          <h1 className="font-black text-xs tracking-wider text-white leading-tight uppercase line-clamp-2">
+            {systemConfig.org_name || 'MONITORING PERBALA'}
+          </h1>
+          <span className="text-[9px] text-purple-300 font-bold uppercase tracking-widest block mt-0.5">SISTEM BOSP</span>
         </div>
       </div>
 

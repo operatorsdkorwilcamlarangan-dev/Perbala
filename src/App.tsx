@@ -69,7 +69,10 @@ import {
   Database,
   X,
   CalendarRange,
-  ArrowDownToLine
+  ArrowDownToLine,
+  School as SchoolIcon,
+  BookOpen,
+  Upload
 } from 'lucide-react';
 
 export default function App() {
@@ -928,11 +931,23 @@ export default function App() {
 
         <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-8 shadow-2xl relative z-10 space-y-6">
           <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 shadow-lg shadow-purple-500/30 mb-4 text-white">
-              <Wallet className="w-8 h-8" />
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 shadow-lg shadow-purple-500/30 mb-4 text-white overflow-hidden">
+              {systemConfig.logo_preset === 'custom' && systemConfig.logo_url ? (
+                <img src={systemConfig.logo_url} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : systemConfig.logo_preset === 'preset-school' ? (
+                <SchoolIcon className="w-8 h-8" />
+              ) : systemConfig.logo_preset === 'preset-coins' ? (
+                <Coins className="w-8 h-8" />
+              ) : systemConfig.logo_preset === 'preset-book' ? (
+                <BookOpen className="w-8 h-8" />
+              ) : (
+                <Wallet className="w-8 h-8" />
+              )}
             </div>
-            <h2 className="text-2xl font-black text-slate-800 tracking-wide">MONITORING PERBALA</h2>
-            <p className="text-xs text-slate-500 mt-1">{systemConfig.org_name}</p>
+            <h2 className="text-2xl font-black text-slate-800 tracking-wide uppercase line-clamp-2">
+              {systemConfig.org_name || 'MONITORING PERBALA'}
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">Dinas Monitoring & Evaluasi Penyerapan Dana Bantuan Sekolah</p>
             <span className="inline-block mt-3 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-black tracking-widest uppercase">
               SISTEM BOSP MANDIRI
             </span>
@@ -1045,6 +1060,7 @@ export default function App() {
           setIsApiModalOpen(true);
         }}
         hasApiUrl={!!apiUrl}
+        systemConfig={systemConfig}
       />
 
       {/* Main Content Area */}
@@ -2434,6 +2450,110 @@ export default function App() {
                     onChange={(e) => setSystemConfig({ ...systemConfig, org_name: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-purple-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 mb-1.5">Logo / Icon Organisasi</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
+                    {[
+                      { id: 'preset-wallet', label: 'Wallet', icon: <Wallet className="w-5 h-5 text-purple-600" /> },
+                      { id: 'preset-school', label: 'Sekolah', icon: <SchoolIcon className="w-5 h-5 text-amber-600" /> },
+                      { id: 'preset-coins', label: 'Koin', icon: <Coins className="w-5 h-5 text-emerald-600" /> },
+                      { id: 'preset-book', label: 'Buku', icon: <BookOpen className="w-5 h-5 text-blue-600" /> },
+                      { id: 'custom', label: 'Kustom', icon: <Upload className="w-5 h-5 text-slate-600" /> }
+                    ].map((p) => {
+                      const active = systemConfig.logo_preset === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setSystemConfig({ ...systemConfig, logo_preset: p.id })}
+                          className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                            active
+                              ? 'border-purple-600 bg-purple-50 text-purple-800 ring-2 ring-purple-100'
+                              : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {p.icon}
+                          <span className="text-[10px] mt-1 font-bold">{p.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {systemConfig.logo_preset === 'custom' && (
+                    <div className="space-y-3">
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const files = e.dataTransfer.files;
+                          if (files && files.length > 0) {
+                            const file = files[0];
+                            if (file.type.startsWith('image/')) {
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                setSystemConfig({
+                                  ...systemConfig,
+                                  logo_url: reader.result as string
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }
+                        }}
+                        className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100/70 transition cursor-pointer relative"
+                        onClick={() => {
+                          const fileInput = document.getElementById('logo-file-input');
+                          if (fileInput) fileInput.click();
+                        }}
+                      >
+                        <input
+                          id="logo-file-input"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = e.target.files;
+                            if (files && files.length > 0) {
+                              const file = files[0];
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                setSystemConfig({
+                                  ...systemConfig,
+                                  logo_url: reader.result as string
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                        {systemConfig.logo_url ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <img
+                              src={systemConfig.logo_url}
+                              alt="Logo Kustom"
+                              className="w-16 h-16 object-cover rounded-xl border border-slate-200"
+                              referrerPolicy="no-referrer"
+                            />
+                            <span className="text-[10px] text-purple-600 font-bold underline">Ubah Gambar</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="flex justify-center text-slate-400">
+                              <Upload className="w-6 h-6" />
+                            </div>
+                            <p className="text-[11px] text-slate-600 font-bold">Tarik & lepas gambar di sini, atau klik untuk memilih</p>
+                            <p className="text-[9px] text-slate-400">Format PNG, JPG, JPEG (Maks. 2MB)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
