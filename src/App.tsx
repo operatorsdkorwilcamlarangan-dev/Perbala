@@ -96,6 +96,7 @@ export default function App() {
   const [tarikTunaiList, setTarikTunaiList] = useState<TarikTunai[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(defaultSystemConfig);
   const [syncStatus, setSyncStatus] = useState<'active' | 'error' | 'syncing'>('active');
+  const [syncErrorReason, setSyncErrorReason] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
 
   // App UI Navigation & Filters
@@ -179,6 +180,7 @@ export default function App() {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
+      setSyncErrorReason(null);
 
       if (snapshot.exists()) {
         const data = snapshot.data();
@@ -251,9 +253,38 @@ export default function App() {
             setSyncStatus('error');
           });
       }
-    }, (err) => {
+    }, (err: any) => {
       console.warn('Firestore subscription connection issue/error:', err);
       setSyncStatus('error');
+      
+      // Determine user-friendly error reason
+      let reason = 'Jaringan terputus atau koneksi tidak stabil';
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        reason = 'Perangkat Anda sedang luring (tidak ada internet)';
+      } else if (err && err.code) {
+        switch (err.code) {
+          case 'permission-denied':
+            reason = 'Izin ditolak (Aturan keamanan database membatasi)';
+            break;
+          case 'unauthenticated':
+            reason = 'Sesi masuk kedaluwarsa atau tidak terautentikasi';
+            break;
+          case 'unavailable':
+            reason = 'Server Firestore sedang sibuk / tidak merespon';
+            break;
+          case 'quota-exceeded':
+            reason = 'Kuota pembacaan/penulisan server awan terlampaui';
+            break;
+          case 'not-found':
+            reason = 'Dokumen basis data tidak ditemukan di server awan';
+            break;
+          default:
+            reason = `${err.message || 'Koneksi gagal'} (${err.code})`;
+        }
+      } else if (err && err.message) {
+        reason = err.message;
+      }
+      setSyncErrorReason(reason);
       
       // Auto-retry with exponential backoff delay starting at 5s, max 30s
       const nextDelay = Math.min(1000 * Math.pow(2, Math.min(retryCount, 6)) + 4000, 30000);
@@ -524,6 +555,7 @@ export default function App() {
   // Sync / Load database data from Cloud Server
   const loadDatabaseFromApi = async () => {
     setIsLoadingData(true);
+    setSyncErrorReason(null);
     addToast('Menghubungkan', 'Mencoba menghubungkan kembali ke basis data awan...', 'info');
     try {
       startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, true);
@@ -531,46 +563,10 @@ export default function App() {
     } catch (err: any) {
       setIsLoadingData(false);
       setSyncStatus('error');
+      setSyncErrorReason(err.message || 'Gagal menginisialisasi Firestore');
       addToast('Koneksi Gagal', 'Gagal menghubungkan ke basis data awan Firestore.', 'error');
     }
   };
-
-  // Silent automatic background database synchronization with cloud server
-  const syncDatabaseSilently = async () => {
-    try {
-      setSyncStatus('syncing');
-      const response = await fetch('/api/local-db');
-      const data = await response.json();
-      if (data.success) {
-        if (data.schools) setSchools(data.schools);
-        if (data.operators) setOperators(data.operators);
-        if (data.monthlyPagu) setMonthlyPagu(data.monthlyPagu);
-        if (data.rabList) setRabList(data.rabList);
-        if (data.transactions) setTransactions(data.transactions);
-        if (data.tarikTunaiList) setTarikTunaiList(data.tarikTunaiList);
-        if (data.systemConfig) setSystemConfig(data.systemConfig);
-        
-        setSyncStatus('active');
-        setLastSyncTime(new Date());
-      } else {
-        setSyncStatus('error');
-      }
-    } catch (err: any) {
-      setSyncStatus('error');
-    }
-  };
-
-  // 2.1. Periodic Real-Time Synchronization Polling (Runs every 10 seconds)
-  useEffect(() => {
-    setSyncStatus('active');
-    
-    // Setup interval for silent polling
-    const intervalId = setInterval(() => {
-      syncDatabaseSilently();
-    }, 10000); // 10 seconds
-    
-    return () => clearInterval(intervalId);
-  }, []);
 
   // Perform Logged Activity (locally or noop since spreadsheet is removed)
   const logActivity = async (actionName: string, detail: string) => {
@@ -1308,6 +1304,7 @@ export default function App() {
           syncStatus={syncStatus}
           lastSyncTime={lastSyncTime}
           onManualSync={loadDatabaseFromApi}
+          syncErrorReason={syncErrorReason}
         />
 
         {/* View Renderings */}

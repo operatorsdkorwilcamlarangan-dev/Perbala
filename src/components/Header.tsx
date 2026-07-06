@@ -19,6 +19,7 @@ interface HeaderProps {
   syncStatus?: 'active' | 'simulator' | 'error' | 'syncing';
   lastSyncTime?: Date | null;
   onManualSync?: () => void;
+  syncErrorReason?: string | null;
 }
 
 export default function Header({
@@ -32,7 +33,8 @@ export default function Header({
   apiUrl,
   syncStatus = 'simulator',
   lastSyncTime = null,
-  onManualSync
+  onManualSync,
+  syncErrorReason = null
 }: HeaderProps) {
   // Format tab ID to beautiful human-readable titles
   const getTabTitle = () => {
@@ -77,17 +79,27 @@ export default function Header({
         );
       case 'error':
         return (
-          <div className="hidden lg:flex items-center gap-2 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl text-rose-700 font-bold text-[11px] h-9 shadow-sm">
-            <CloudOff className="w-3.5 h-3.5 text-rose-500" />
-            <span>Awan Terputus</span>
-            <button
-              onClick={onManualSync}
-              type="button"
-              title="Coba sinkronisasi sekarang"
-              className="p-1 hover:bg-rose-100 rounded-lg text-rose-600 transition"
+          <div className="hidden lg:flex items-center gap-2">
+            <div 
+              className="flex items-center gap-2 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl text-rose-700 font-bold text-[11px] h-9 shadow-sm cursor-help"
+              title={syncErrorReason || 'Koneksi terputus ke server database'}
             >
-              <RefreshCw className="w-3 h-3" />
-            </button>
+              <CloudOff className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+              <span>Awan Terputus</span>
+              <button
+                onClick={onManualSync}
+                type="button"
+                title="Coba hubungkan kembali sekarang"
+                className="p-1 hover:bg-rose-100 rounded-lg text-rose-600 transition"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            </div>
+            {syncErrorReason && (
+              <span className="max-w-[220px] text-[10px] text-rose-500 font-semibold bg-rose-50 border border-rose-100/50 px-2 py-1 rounded-lg truncate" title={syncErrorReason}>
+                Penyebab: {syncErrorReason}
+              </span>
+            )}
           </div>
         );
       case 'active':
