@@ -63,15 +63,6 @@ export default function Header({
   const userInitials = currentUser.nama.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase();
 
   const renderSyncIndicator = () => {
-    if (!apiUrl) {
-      return (
-        <div className="hidden lg:flex items-center gap-2 bg-slate-50 border border-slate-150 px-3 py-1.5 rounded-xl text-slate-500 font-bold text-[11px] h-9">
-          <CloudOff className="w-3.5 h-3.5 text-slate-400" />
-          <span>Mode Simulator (Lokal)</span>
-        </div>
-      );
-    }
-
     const timeString = lastSyncTime
       ? lastSyncTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       : '';
@@ -79,19 +70,16 @@ export default function Header({
     switch (syncStatus) {
       case 'syncing':
         return (
-          <div className="hidden lg:flex items-center gap-2 bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-xl text-purple-700 font-bold text-[11px] h-9">
+          <div className="hidden lg:flex items-center gap-2 bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-xl text-purple-700 font-bold text-[11px] h-9 shadow-sm">
             <RefreshCw className="w-3.5 h-3.5 text-purple-500 animate-spin" />
-            <span>Sinkronisasi...</span>
+            <span>Sinkronisasi Awan...</span>
           </div>
         );
       case 'error':
         return (
-          <div className="hidden lg:flex items-center gap-2 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl text-rose-700 font-bold text-[11px] h-9">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-            </span>
-            <span>Koneksi Gagal</span>
+          <div className="hidden lg:flex items-center gap-2 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl text-rose-700 font-bold text-[11px] h-9 shadow-sm">
+            <CloudOff className="w-3.5 h-3.5 text-rose-500" />
+            <span>Awan Terputus</span>
             <button
               onClick={onManualSync}
               type="button"
@@ -105,12 +93,13 @@ export default function Header({
       case 'active':
       default:
         return (
-          <div className="hidden lg:flex items-center gap-2.5 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl text-emerald-700 font-bold text-[11px] h-9">
+          <div className="hidden lg:flex items-center gap-2.5 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl text-emerald-700 font-bold text-[11px] h-9 shadow-sm">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span>Sync Real-Time Aktif {timeString && `(${timeString})`}</span>
+            <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Sinkronisasi Awan Aktif {timeString && `(${timeString})`}</span>
             <button
               onClick={onManualSync}
               type="button"

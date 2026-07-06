@@ -24,7 +24,6 @@ import {
   Scale,
   FileText,
   Settings,
-  Database,
   LogOut,
   Wallet
 } from 'lucide-react';
@@ -36,8 +35,6 @@ interface SidebarProps {
   onLogout: () => void;
   onRoleSwitch: (role: 'Admin' | 'Anggota') => void;
   pendingTarikCount: number;
-  onOpenApiModal: () => void;
-  hasApiUrl: boolean;
   systemConfig: SystemConfig;
 }
 
@@ -48,8 +45,6 @@ export default function Sidebar({
   onLogout,
   onRoleSwitch,
   pendingTarikCount,
-  onOpenApiModal,
-  hasApiUrl,
   systemConfig
 }: SidebarProps) {
   const isSelected = (tabId: string) => currentTab === tabId;
@@ -265,18 +260,6 @@ export default function Sidebar({
               <span className="flex items-center gap-3">
                 <Settings className="w-4 h-4" />
                 <span>PENGATURAN PROFILE</span>
-              </span>
-            </button>
-            <button
-              onClick={onOpenApiModal}
-              className="w-full flex items-center justify-between px-4 py-2 rounded-lg text-xs text-purple-300 hover:text-white hover:bg-white/[0.02] transition text-left"
-            >
-              <span className="flex items-center gap-3">
-                <Database className="w-4 h-4" />
-                <span>CONFIG SPREADSHEET</span>
-              </span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${hasApiUrl ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                {hasApiUrl ? 'Online' : 'Mock'}
               </span>
             </button>
           </div>

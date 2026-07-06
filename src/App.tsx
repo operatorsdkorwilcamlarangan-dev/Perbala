@@ -76,6 +76,8 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const apiUrl = '';
+
   // Authentication & Session
   const [currentUser, setCurrentUser] = useState<Operator | null>(null);
   const [loginUsername, setLoginUsername] = useState('');
@@ -91,17 +93,8 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [tarikTunaiList, setTarikTunaiList] = useState<TarikTunai[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(defaultSystemConfig);
-  const [apiUrl, setApiUrl] = useState(() => {
-    return localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
-  });
-  const [syncStatus, setSyncStatus] = useState<'active' | 'simulator' | 'error' | 'syncing'>(() => {
-    const url = localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
-    return url ? 'active' : 'simulator';
-  });
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(() => {
-    const url = localStorage.getItem('perbala_api_url') || ((import.meta as any).env?.VITE_API_URL as string) || '';
-    return url ? new Date() : null;
-  });
+  const [syncStatus, setSyncStatus] = useState<'active' | 'error' | 'syncing'>('active');
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
 
   // App UI Navigation & Filters
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -134,7 +127,6 @@ export default function App() {
   const [isTarikTunaiModalOpen, setIsTarikTunaiModalOpen] = useState(false);
   const [isPaguBulanModalOpen, setIsPaguBulanModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
 
   // Selected editing item states
   const [editingSchool, setEditingSchool] = useState<School | null>(null);
@@ -144,8 +136,6 @@ export default function App() {
   const [editingTarikTunai, setEditingTarikTunai] = useState<TarikTunai | null>(null);
   const [editingPaguBulan, setEditingPaguBulan] = useState<string | null>(null);
   const [importType, setImportType] = useState<'schools' | 'operators'>('schools');
-
-  const [tempApiUrl, setTempApiUrl] = useState('');
 
   const isInitialLoaded = useRef(false);
 
@@ -209,111 +199,46 @@ export default function App() {
         const configRes = await fetch('/api/config');
         const configData = await configRes.json();
 
-        let activeApiUrl = '';
-        if (configData.success) {
-          activeApiUrl = configData.apiUrl || '';
-          setApiUrl(activeApiUrl);
-          setTempApiUrl(activeApiUrl);
-          if (activeApiUrl) {
-            localStorage.setItem('perbala_api_url', activeApiUrl);
-          } else {
-            localStorage.removeItem('perbala_api_url');
-          }
-
-          if (configData.systemConfig) {
-            const serverConfig = configData.systemConfig;
-            setSystemConfig(serverConfig);
-            localStorage.setItem('perbala_org_name', serverConfig.org_name);
-            localStorage.setItem('perbala_logo_preset', serverConfig.logo_preset);
-            localStorage.setItem('perbala_logo_url', serverConfig.logo_url || '');
-            localStorage.setItem('perbala_deadline_t1', serverConfig.deadline_t1);
-            localStorage.setItem('perbala_deadline_t2', serverConfig.deadline_t2);
-          }
+        if (configData.success && configData.systemConfig) {
+          const serverConfig = configData.systemConfig;
+          setSystemConfig(serverConfig);
+          localStorage.setItem('perbala_org_name', serverConfig.org_name);
+          localStorage.setItem('perbala_logo_preset', serverConfig.logo_preset);
+          localStorage.setItem('perbala_logo_url', serverConfig.logo_url || '');
+          localStorage.setItem('perbala_deadline_t1', serverConfig.deadline_t1);
+          localStorage.setItem('perbala_deadline_t2', serverConfig.deadline_t2);
         }
 
-        // 1.3 Fetch database depending on Mode
-        if (activeApiUrl) {
-          // Connected Mode: Load from Google Sheets Apps Script WebApp
-          setSyncStatus('syncing');
-          const response = await fetch(activeApiUrl, {
-            method: 'POST',
-            mode: 'cors',
-            body: JSON.stringify({ action: 'getData' })
-          });
-          const data = await response.json();
-          if (data.success) {
-            if (data.schools) {
-              setSchools(data.schools);
-              localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
-            }
-            if (data.users) {
-              setOperators(data.users);
-              localStorage.setItem('perbala_operators', JSON.stringify(data.users));
-            }
-            if (data.monthly_pagu) {
-              setMonthlyPagu(data.monthly_pagu);
-              localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
-            }
-            if (data.rab) {
-              setRabList(data.rab);
-              localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
-            }
-            if (data.transactions) {
-              setTransactions(data.transactions);
-              localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
-            }
-            if (data.tarik_tunai) {
-              setTarikTunaiList(data.tarik_tunai);
-              localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
-            }
-
-            const incomingConfig = data.config || data.systemConfig || data.system_config;
-            if (incomingConfig) {
-              const loadedConfig = {
-                org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
-                logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
-                logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
-                deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
-                deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
-              };
-              setSystemConfig(loadedConfig);
-              localStorage.setItem('perbala_org_name', loadedConfig.org_name);
-              localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
-              localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
-              localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
-              localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
-            }
-            setSyncStatus('active');
-            setLastSyncTime(new Date());
-          } else {
-            setSyncStatus('error');
+        // 1.3 Fetch cloud database
+        setSyncStatus('syncing');
+        const dbRes = await fetch('/api/local-db');
+        const dbData = await dbRes.json();
+        if (dbData.success) {
+          setSchools(dbData.schools);
+          setOperators(dbData.operators);
+          setMonthlyPagu(dbData.monthlyPagu);
+          setRabList(dbData.rabList);
+          setTransactions(dbData.transactions);
+          setTarikTunaiList(dbData.tarikTunaiList);
+          if (dbData.systemConfig) {
+            setSystemConfig(dbData.systemConfig);
           }
+          // Sync to LocalStorage
+          localStorage.setItem('perbala_schools', JSON.stringify(dbData.schools));
+          localStorage.setItem('perbala_operators', JSON.stringify(dbData.operators));
+          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbData.monthlyPagu));
+          localStorage.setItem('perbala_rab', JSON.stringify(dbData.rabList));
+          localStorage.setItem('perbala_transactions', JSON.stringify(dbData.transactions));
+          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbData.tarikTunaiList));
+          
+          setSyncStatus('active');
+          setLastSyncTime(new Date());
         } else {
-          // Simulator Mode: Load shared database from our Express server
-          const dbRes = await fetch('/api/local-db');
-          const dbData = await dbRes.json();
-          if (dbData.success) {
-            setSchools(dbData.schools);
-            setOperators(dbData.operators);
-            setMonthlyPagu(dbData.monthlyPagu);
-            setRabList(dbData.rabList);
-            setTransactions(dbData.transactions);
-            setTarikTunaiList(dbData.tarikTunaiList);
-            if (dbData.systemConfig) {
-              setSystemConfig(dbData.systemConfig);
-            }
-            // Sync to LocalStorage
-            localStorage.setItem('perbala_schools', JSON.stringify(dbData.schools));
-            localStorage.setItem('perbala_operators', JSON.stringify(dbData.operators));
-            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbData.monthlyPagu));
-            localStorage.setItem('perbala_rab', JSON.stringify(dbData.rabList));
-            localStorage.setItem('perbala_transactions', JSON.stringify(dbData.transactions));
-            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbData.tarikTunaiList));
-          }
-          setSyncStatus('simulator');
+          setSyncStatus('error');
         }
       } catch (err) {
         console.error('Error during initial server-wide configuration fetch:', err);
+        setSyncStatus('error');
       } finally {
         isInitialLoaded.current = true;
       }
@@ -334,11 +259,9 @@ export default function App() {
     localStorage.setItem('perbala_transactions', JSON.stringify(transactions));
     localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
 
-    // Save to Express server config if we are in simulator/local mode
-    if (!apiUrl) {
-      saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
-    }
-  }, [schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, apiUrl]);
+    // Save to Express server config (Cloud Sync)
+    saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig);
+  }, [schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig]);
 
   // Toast Helpers
   const addToast = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error') => {
@@ -458,159 +381,72 @@ export default function App() {
   // Sisa Anggaran: Pagu Tahunan - Approved realisasi - Tarik selesai
   const sisaAnggaranBersih = Math.max(0, totalPaguTahunan - approvedRealisasiT1 - totalTarikSelesai);
 
-  // Sync / Load database data from API webhook if available
+  // Sync / Load database data from Cloud Server
   const loadDatabaseFromApi = async () => {
-    if (!apiUrl) {
-      addToast('Mode Simulator', 'Koneksi lokal aktif. Isi Config Spreadsheet untuk sync database Google Sheets.', 'info');
-      return;
-    }
     setIsLoadingData(true);
     setSyncStatus('syncing');
     try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        mode: 'cors',
-        body: JSON.stringify({ action: 'getData' })
-      });
+      const response = await fetch('/api/local-db');
       const data = await response.json();
       setIsLoadingData(false);
       if (data.success) {
         if (data.schools) setSchools(data.schools);
-        if (data.users) setOperators(data.users);
-        if (data.monthly_pagu) setMonthlyPagu(data.monthly_pagu);
-        if (data.rab) setRabList(data.rab);
+        if (data.operators) setOperators(data.operators);
+        if (data.monthlyPagu) setMonthlyPagu(data.monthlyPagu);
+        if (data.rabList) setRabList(data.rabList);
         if (data.transactions) setTransactions(data.transactions);
-        if (data.tarik_tunai) setTarikTunaiList(data.tarik_tunai);
-        
-        const incomingConfig = data.config || data.systemConfig || data.system_config;
-        if (incomingConfig) {
-          const loadedConfig = {
-            org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
-            logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
-            logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
-            deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
-            deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
-          };
-          setSystemConfig(loadedConfig);
-          localStorage.setItem('perbala_org_name', loadedConfig.org_name);
-          localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
-          localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
-          localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
-          localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
+        if (data.tarikTunaiList) setTarikTunaiList(data.tarikTunaiList);
+        if (data.systemConfig) {
+          setSystemConfig(data.systemConfig);
+          localStorage.setItem('perbala_org_name', data.systemConfig.org_name);
+          localStorage.setItem('perbala_logo_preset', data.systemConfig.logo_preset);
+          localStorage.setItem('perbala_logo_url', data.systemConfig.logo_url || '');
+          localStorage.setItem('perbala_deadline_t1', data.systemConfig.deadline_t1);
+          localStorage.setItem('perbala_deadline_t2', data.systemConfig.deadline_t2);
         }
         
         setSyncStatus('active');
         setLastSyncTime(new Date());
-        addToast('Sinkronisasi Sukses', 'Seluruh database disinkronkan dengan Google Sheets.', 'success');
+        addToast('Sinkronisasi Sukses', 'Database berhasil disinkronkan dengan server awan.', 'success');
       } else {
         setSyncStatus('error');
-        addToast('Gagal Sinkronisasi', data.message || 'Respons API tidak sukses.', 'error');
+        addToast('Gagal Sinkronisasi', 'Gagal memuat data dari server.', 'error');
       }
     } catch (err: any) {
       setIsLoadingData(false);
       setSyncStatus('error');
-      addToast('Koneksi Gagal', 'Gagal menghubungi server Apps Script. Menggunakan database lokal.', 'warning');
+      addToast('Koneksi Gagal', 'Gagal menghubungi server awan. Menggunakan database lokal.', 'warning');
     }
   };
 
-  // Silent automatic background database synchronization
+  // Silent automatic background database synchronization with cloud server
   const syncDatabaseSilently = async () => {
     try {
-      if (apiUrl) {
-        setSyncStatus('syncing');
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          mode: 'cors',
-          body: JSON.stringify({ action: 'getData' })
-        });
-        const data = await response.json();
-        if (data.success) {
-          if (data.schools) {
-            setSchools(data.schools);
-            localStorage.setItem('perbala_schools', JSON.stringify(data.schools));
-          }
-          if (data.users) {
-            setOperators(data.users);
-            localStorage.setItem('perbala_operators', JSON.stringify(data.users));
-          }
-          if (data.monthly_pagu) {
-            setMonthlyPagu(data.monthly_pagu);
-            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(data.monthly_pagu));
-          }
-          if (data.rab) {
-            setRabList(data.rab);
-            localStorage.setItem('perbala_rab', JSON.stringify(data.rab));
-          }
-          if (data.transactions) {
-            setTransactions(data.transactions);
-            localStorage.setItem('perbala_transactions', JSON.stringify(data.transactions));
-          }
-          if (data.tarik_tunai) {
-            setTarikTunaiList(data.tarik_tunai);
-            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(data.tarik_tunai));
-          }
-          
-          const incomingConfig = data.config || data.systemConfig || data.system_config;
-          if (incomingConfig) {
-            const loadedConfig = {
-              org_name: incomingConfig.org_name || defaultSystemConfig.org_name,
-              logo_preset: incomingConfig.logo_preset || defaultSystemConfig.logo_preset,
-              logo_url: incomingConfig.logo_url || defaultSystemConfig.logo_url,
-              deadline_t1: incomingConfig.deadline_t1 || defaultSystemConfig.deadline_t1,
-              deadline_t2: incomingConfig.deadline_t2 || defaultSystemConfig.deadline_t2,
-            };
-            setSystemConfig(loadedConfig);
-            localStorage.setItem('perbala_org_name', loadedConfig.org_name);
-            localStorage.setItem('perbala_logo_preset', loadedConfig.logo_preset);
-            localStorage.setItem('perbala_logo_url', loadedConfig.logo_url);
-            localStorage.setItem('perbala_deadline_t1', loadedConfig.deadline_t1);
-            localStorage.setItem('perbala_deadline_t2', loadedConfig.deadline_t2);
-          }
-          setSyncStatus('active');
-          setLastSyncTime(new Date());
-        } else {
-          setSyncStatus('error');
-        }
+      setSyncStatus('syncing');
+      const response = await fetch('/api/local-db');
+      const data = await response.json();
+      if (data.success) {
+        if (data.schools) setSchools(data.schools);
+        if (data.operators) setOperators(data.operators);
+        if (data.monthlyPagu) setMonthlyPagu(data.monthlyPagu);
+        if (data.rabList) setRabList(data.rabList);
+        if (data.transactions) setTransactions(data.transactions);
+        if (data.tarikTunaiList) setTarikTunaiList(data.tarikTunaiList);
+        if (data.systemConfig) setSystemConfig(data.systemConfig);
+        
+        setSyncStatus('active');
+        setLastSyncTime(new Date());
       } else {
-        // Simulator Mode: Sync shared database from our Express server to see edits from other devices
-        const dbRes = await fetch('/api/local-db');
-        const dbData = await dbRes.json();
-        if (dbData.success) {
-          setSchools(dbData.schools);
-          setOperators(dbData.operators);
-          setMonthlyPagu(dbData.monthlyPagu);
-          setRabList(dbData.rabList);
-          setTransactions(dbData.transactions);
-          setTarikTunaiList(dbData.tarikTunaiList);
-          if (dbData.systemConfig) {
-            setSystemConfig(dbData.systemConfig);
-          }
-          // Sync to LocalStorage
-          localStorage.setItem('perbala_schools', JSON.stringify(dbData.schools));
-          localStorage.setItem('perbala_operators', JSON.stringify(dbData.operators));
-          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbData.monthlyPagu));
-          localStorage.setItem('perbala_rab', JSON.stringify(dbData.rabList));
-          localStorage.setItem('perbala_transactions', JSON.stringify(dbData.transactions));
-          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbData.tarikTunaiList));
-        }
-        setSyncStatus('simulator');
+        setSyncStatus('error');
       }
     } catch (err: any) {
-      if (apiUrl) {
-        setSyncStatus('error');
-      } else {
-        setSyncStatus('simulator');
-      }
+      setSyncStatus('error');
     }
   };
 
-  // 2.1. Periodic Real-Time Synchronization Polling (Runs every 10 seconds for both WebApp API and Local DB Simulator)
+  // 2.1. Periodic Real-Time Synchronization Polling (Runs every 10 seconds)
   useEffect(() => {
-    if (apiUrl) {
-      setSyncStatus('active');
-    } else {
-      setSyncStatus('simulator');
-    }
+    setSyncStatus('active');
     
     // Setup interval for silent polling
     const intervalId = setInterval(() => {
@@ -618,25 +454,11 @@ export default function App() {
     }, 10000); // 10 seconds
     
     return () => clearInterval(intervalId);
-  }, [apiUrl]);
+  }, []);
 
-  // Perform Logged Activity to WebApp if connected
+  // Perform Logged Activity (locally or noop since spreadsheet is removed)
   const logActivity = async (actionName: string, detail: string) => {
-    if (!apiUrl) return;
-    try {
-      await fetch(apiUrl, {
-        method: 'POST',
-        mode: 'cors',
-        body: JSON.stringify({
-          action: 'logActivity',
-          user: currentUser?.nama || 'Guest',
-          role: currentUser?.role || 'Guest',
-          activityAction: actionName,
-          detail: detail,
-          status: 'Sukses'
-        })
-      });
-    } catch (err) {}
+    console.log(`Activity Log: ${actionName} - ${detail}`);
   };
 
   // 3. Authenticate User Login
@@ -1348,17 +1170,12 @@ export default function App() {
       
       {/* Sidebar component */}
       <Sidebar
-        currentUser={currentUser}
+        currentUser={currentUser!}
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         onLogout={handleLogout}
         onRoleSwitch={handleRoleSwitch}
         pendingTarikCount={pendingTarikCount}
-        onOpenApiModal={() => {
-          setTempApiUrl(apiUrl);
-          setIsApiModalOpen(true);
-        }}
-        hasApiUrl={!!apiUrl}
         systemConfig={systemConfig}
       />
 
@@ -1372,7 +1189,6 @@ export default function App() {
           onSchoolFilterChange={setSchoolFilter}
           onLogout={handleLogout}
           systemName={systemConfig.org_name}
-          apiUrl={apiUrl}
           syncStatus={syncStatus}
           lastSyncTime={lastSyncTime}
           onManualSync={loadDatabaseFromApi}
@@ -2908,8 +2724,8 @@ export default function App() {
           <p>© 2026 Laporan Monitoring PERBALA. Hak Cipta Dilindungi Undang-Undang.</p>
           <p className="mt-1 text-[9px] font-bold">
             Database Sync State:{' '}
-            <span className={apiUrl ? 'text-emerald-600' : 'text-amber-500'}>
-              {apiUrl ? 'Terhubung Google Sheets API (Online)' : 'Simulator Mode (LocalStorage)'}
+            <span className="text-emerald-600">
+              Sinkronisasi Awan Real-Time Aktif
             </span>
           </p>
         </footer>
@@ -3006,74 +2822,6 @@ export default function App() {
         onImportOperators={handleImportOperators}
         onCancel={() => setIsImportModalOpen(false)}
       />
-
-      {/* Google Sheets API Config Modal */}
-      {isApiModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Database className="w-5 h-5 text-purple-600" />
-                Koneksi Google Sheets
-              </h3>
-              <button
-                onClick={() => setIsApiModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-50"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Masukkan Web App URL hasil deployment Google Apps Script Anda untuk melakukan sinkronisasi database dua arah sesungguhnya dengan Google Sheets.
-            </p>
-            <div className="space-y-1 text-xs">
-              <label className="block text-slate-605 font-bold mb-1">Web App API URL</label>
-              <input
-                type="text"
-                value={tempApiUrl}
-                onChange={(e) => setTempApiUrl(e.target.value)}
-                placeholder="https://script.google.com/macros/s/.../exec"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 font-mono focus:outline-none focus:border-purple-500"
-              />
-            </div>
-            <div className="flex gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={async () => {
-                  setApiUrl(tempApiUrl);
-                  localStorage.setItem('perbala_api_url', tempApiUrl);
-                  setIsApiModalOpen(false);
-                  addToast('API Tersimpan', 'Tautan API Google Sheets berhasil diperbarui.', 'success');
-                  
-                  // Persist API URL to central Express server
-                  try {
-                    await fetch('/api/config', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ apiUrl: tempApiUrl })
-                    });
-                  } catch (err) {
-                    console.error('Failed to save API URL on central server:', err);
-                  }
-
-                  // Trigger load
-                  if (tempApiUrl) {
-                    setTimeout(() => loadDatabaseFromApi(), 200);
-                  }
-                }}
-                className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl text-xs hover:bg-purple-700 transition"
-              >
-                Simpan & Hubungkan
-              </button>
-              <button
-                onClick={() => setIsApiModalOpen(false)}
-                className="px-5 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-200 transition"
-              >
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Confirmation Actions Dialog Modal */}
       <ConfirmModal
