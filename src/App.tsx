@@ -102,6 +102,8 @@ export default function App() {
   // App UI Navigation & Filters
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [schoolFilter, setSchoolFilter] = useState('SEMUA');
+  const [monthFilterHabisPakai, setMonthFilterHabisPakai] = useState('SEMUA');
+  const [monthFilterTarikTunai, setMonthFilterTarikTunai] = useState('SEMUA');
   const [dashboardFilterCategory, setDashboardFilterCategory] = useState('SEMUA');
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
@@ -690,6 +692,193 @@ export default function App() {
   // Print function
   const handlePrint = () => {
     window.print();
+  };
+
+  // Helper for printing clean custom report tables via a hidden iframe
+  const printReport = (title: string, headers: string[], rows: any[][]) => {
+    const htmlContent = `
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: 'Plus Jakarta Sans', sans-serif; padding: 20px; color: #333; background: white; }
+            h1 { font-size: 16px; font-weight: 800; text-align: center; margin-bottom: 5px; text-transform: uppercase; color: #1e1b4b; }
+            h2 { font-size: 11px; font-weight: 600; text-align: center; margin-bottom: 25px; color: #475569; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px; }
+            th { border: 1px solid #cbd5e1; padding: 10px 8px; background-color: #f1f5f9; font-weight: bold; text-align: left; text-transform: uppercase; font-size: 9px; color: #1e293b; }
+            td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; color: #334155; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .text-right { text-align: right; font-weight: bold; }
+            .text-center { text-align: center; }
+            .font-mono { font-family: monospace; }
+            .total-row { font-weight: bold; background-color: #e2e8f0 !important; }
+          </style>
+        </head>
+        <body>
+          <div style="border-bottom: 2px solid #1e1b4b; padding-bottom: 10px; margin-bottom: 15px; text-align: center;">
+            <h3 style="margin: 0; font-size: 12px; color: #4f46e5; letter-spacing: 1px; font-weight: 800;">PERHIMPUNAN OPERATOR BENDAHARA ARKAS LARANGAN</h3>
+            <h1 style="margin: 5px 0 0 0;">${title}</h1>
+            <h2 style="margin: 5px 0 0 0;">Laporan Penatausahaan Dana BOSP Mandiri • Tahun Anggaran 2026</h2>
+          </div>
+          <p style="font-size: 10px; color: #64748b; margin-bottom: 10px; font-weight: 600;">Dicetak pada: ${new Date().toLocaleString('id-ID')}</p>
+          <table>
+            <thead>
+              <tr>
+                ${headers.map(h => `<th>${h}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `
+                <tr>
+                  ${row.map((cell, idx) => {
+                    const h = headers[idx].toLowerCase();
+                    const isRight = h.includes('biaya') || h.includes('pagu') || h.includes('nilai') || h.includes('rupiah') || (typeof cell === 'string' && cell.startsWith('Rp '));
+                    const isCenter = h.includes('id') || h.includes('volume') || h.includes('tanggal') || h.includes('bulan') || h.includes('jumlah') || h.includes('status');
+                    return `<td class="${isRight ? 'text-right' : isCenter ? 'text-center' : ''}">${cell}</td>`;
+                  }).join('')}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top: 50px; display: flex; justify-content: space-between; font-size: 10px; padding: 0 40px; page-break-inside: avoid;">
+            <div>
+              <p>Mengetahui,</p>
+              <p style="margin-top: 60px; font-weight: bold; text-decoration: underline;">Ketua Perhimpunan</p>
+            </div>
+            <div>
+              <p>Bendahara Pengeluaran,</p>
+              <p style="margin-top: 60px; font-weight: bold; text-decoration: underline;">Operator Sekolah</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(htmlContent);
+      doc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      }, 500);
+    }
+  };
+
+  const handlePrintTransactionTab = (category: 'BUKU' | 'ALAT' | 'SIPLAH') => {
+    const targetCat = category === 'BUKU' ? 'BUKU' : category === 'ALAT' ? 'ALAT' : 'SIPLAH';
+    const title = category === 'BUKU' ? 'Laporan Belanja Modal Buku' : category === 'ALAT' ? 'Laporan Belanja Modal Alat' : 'Laporan Belanja Habis Pakai';
+    let items = filteredTransactions.filter((t) => t.kategori === targetCat);
+    
+    if (targetCat === 'SIPLAH' && monthFilterHabisPakai !== 'SEMUA') {
+      items = items.filter((t) => getTxMonthName(t).toLowerCase() === monthFilterHabisPakai.toLowerCase());
+    }
+    
+    const headers = ['ID', 'Nama Belanja', 'Sekolah', 'ID RAB', 'Volume', 'Total Biaya', 'Tanggal', 'Bulan', 'Status'];
+    const rows = items.map((tx) => [
+      tx.id,
+      tx.nama_barang,
+      tx.sekolah,
+      tx.rab_id,
+      tx.jumlah.toString(),
+      formatRupiah(tx.total_biaya),
+      tx.tanggal,
+      getTxMonthName(tx),
+      tx.status || 'Disetujui'
+    ]);
+    
+    printReport(title, headers, rows);
+    logActivity('Cetak Transaksi', `Cetak laporan transaksi ${targetCat}`);
+  };
+
+  const handleExportTransactionTabCsv = (category: 'BUKU' | 'ALAT' | 'SIPLAH') => {
+    const targetCat = category === 'BUKU' ? 'BUKU' : category === 'ALAT' ? 'ALAT' : 'SIPLAH';
+    const reportName = category === 'BUKU' ? 'MODAL-BUKU' : category === 'ALAT' ? 'MODAL-ALAT' : 'HABIS-PAKAI';
+    
+    let csvContent = 'data:text/csv;charset=utf-8,\uFEFF'; // Add BOM for excel indonesian formatting
+    csvContent += 'ID;Nama Belanja;Sekolah;Kategori;ID RAB;Volume;Total Biaya;Tanggal;Bulan;Status\n';
+    
+    let items = filteredTransactions.filter((t) => t.kategori === targetCat);
+    if (targetCat === 'SIPLAH' && monthFilterHabisPakai !== 'SEMUA') {
+      items = items.filter((t) => getTxMonthName(t).toLowerCase() === monthFilterHabisPakai.toLowerCase());
+    }
+
+    items.forEach((item) => {
+      csvContent += `"${item.id}";"${item.nama_barang}";"${item.sekolah}";"${item.kategori}";"${item.rab_id}";"${item.jumlah}";${item.total_biaya};"${item.tanggal}";"${getTxMonthName(item)}";"${item.status || 'Disetujui'}"\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `PERBALA-${reportName}-2026.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    logActivity('Unduh Transaksi', `Ekspor file transaksi CSV ${reportName}`);
+    addToast('Ekspor Sukses', `Berkas CSV ${reportName} berhasil diunduh.`, 'success');
+  };
+
+  const handlePrintTarikTunaiTab = () => {
+    const title = 'Laporan Pengajuan Tarik Tunai Mandiri';
+    const headers = ['ID Tarik', 'Sekolah Pemohon', 'Bulan', 'Pagu Bulanan', 'Nilai Realisasi', 'Status', 'Verifikator'];
+    
+    let items = filteredTarikTunai;
+    if (monthFilterTarikTunai !== 'SEMUA') {
+      items = items.filter((item) => item.bulan.toLowerCase().trim() === monthFilterTarikTunai.toLowerCase().trim());
+    }
+
+    const rows = items.map((item) => [
+      item.id,
+      item.sekolah,
+      item.bulan,
+      formatRupiah(item.pagu_bulanan),
+      formatRupiah(item.nilai),
+      item.status,
+      item.verifikator || '-'
+    ]);
+    
+    printReport(title, headers, rows);
+    logActivity('Cetak Tarik Tunai', 'Cetak laporan transaksi Tarik Tunai');
+  };
+
+  const handleExportTarikTunaiTabCsv = () => {
+    let csvContent = 'data:text/csv;charset=utf-8,\uFEFF';
+    csvContent += 'ID Tarik;Sekolah Pemohon;Bulan;Pagu Bulanan;Nilai Realisasi;Status;Verifikator\n';
+    
+    let items = filteredTarikTunai;
+    if (monthFilterTarikTunai !== 'SEMUA') {
+      items = items.filter((item) => item.bulan.toLowerCase().trim() === monthFilterTarikTunai.toLowerCase().trim());
+    }
+
+    items.forEach((item) => {
+      csvContent += `"${item.id}";"${item.sekolah}";"${item.bulan}";${item.pagu_bulanan};${item.nilai};"${item.status}";"${item.verifikator || '-'}"\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `PERBALA-TARIK-TUNAI-2026.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    logActivity('Unduh Tarik Tunai', 'Ekspor file transaksi Tarik Tunai CSV');
+    addToast('Ekspor Sukses', 'Berkas CSV Tarik Tunai berhasil diunduh.', 'success');
   };
 
   // Export CSV download helper
@@ -2023,7 +2212,13 @@ export default function App() {
                   {(() => {
                     const targetCat = currentTab === 'belanja-modal-buku' ? 'BUKU' : currentTab === 'belanja-modal-alat' ? 'ALAT' : 'SIPLAH';
                     const sum = filteredTransactions
-                      .filter((t) => t.kategori === targetCat && t.status === 'Disetujui')
+                      .filter((t) => {
+                        if (t.kategori !== targetCat || t.status !== 'Disetujui') return false;
+                        if (currentTab === 'belanja-habis-pakai' && monthFilterHabisPakai !== 'SEMUA') {
+                          return getTxMonthName(t).toLowerCase() === monthFilterHabisPakai.toLowerCase();
+                        }
+                        return true;
+                      })
                       .reduce((sum, curr) => sum + curr.total_biaya, 0);
                     return <h3 className="text-xl font-extrabold text-amber-700 mt-1">{formatRupiah(sum)}</h3>;
                   })()}
@@ -2035,10 +2230,10 @@ export default function App() {
                     const totalPaguKategori = rabList
                       .filter((r) => r.kategori === targetCat && isSchoolMatch(r.sekolah))
                       .reduce((sum, curr) => sum + curr.alokasi, 0);
-                    const sum = filteredTransactions
+                    const sumAllTime = filteredTransactions
                       .filter((t) => t.kategori === targetCat && t.status === 'Disetujui')
                       .reduce((sum, curr) => sum + curr.total_biaya, 0);
-                    const sisaLimit = totalPaguKategori - sum;
+                    const sisaLimit = totalPaguKategori - sumAllTime;
                     return <h3 className="text-xl font-extrabold text-teal-700 mt-1">{formatRupiah(sisaLimit)}</h3>;
                   })()}
                 </div>
@@ -2052,15 +2247,55 @@ export default function App() {
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">Berdasarkan data kuitansi pengadaan barang belanja sekolah</p>
                   </div>
-                  <button
-                    onClick={() => {
-                      setEditingTransaction(null);
-                      setIsTransactionModalOpen(true);
-                    }}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" /> Realisasi Baru
-                  </button>
+                  <div className="flex items-center flex-wrap gap-2">
+                    {currentTab === 'belanja-habis-pakai' && (
+                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
+                        <span className="text-slate-400 font-medium">Bulan:</span>
+                        <select
+                          value={monthFilterHabisPakai}
+                          onChange={(e) => setMonthFilterHabisPakai(e.target.value)}
+                          className="bg-transparent border-none text-slate-800 font-black focus:outline-none cursor-pointer"
+                        >
+                          <option value="SEMUA">Semua Bulan</option>
+                          {[...bulanTahap1, ...bulanTahap2].map((b) => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cat = currentTab === 'belanja-modal-buku' ? 'BUKU' : currentTab === 'belanja-modal-alat' ? 'ALAT' : 'SIPLAH';
+                        handlePrintTransactionTab(cat);
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200/80"
+                      title="Cetak Laporan Transaksi"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-slate-500" /> Cetak
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cat = currentTab === 'belanja-modal-buku' ? 'BUKU' : currentTab === 'belanja-modal-alat' ? 'ALAT' : 'SIPLAH';
+                        handleExportTransactionTabCsv(cat);
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200/80"
+                      title="Unduh CSV Transaksi"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-500" /> Unduh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTransaction(null);
+                        setIsTransactionModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-purple-500/10"
+                    >
+                      <Plus className="w-4 h-4" /> Realisasi Baru
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -2083,7 +2318,11 @@ export default function App() {
                       {filteredTransactions
                         .filter((t) => {
                           const targetCat = currentTab === 'belanja-modal-buku' ? 'BUKU' : currentTab === 'belanja-modal-alat' ? 'ALAT' : 'SIPLAH';
-                          return t.kategori === targetCat;
+                          if (t.kategori !== targetCat) return false;
+                          if (currentTab === 'belanja-habis-pakai' && monthFilterHabisPakai !== 'SEMUA') {
+                            return getTxMonthName(t).toLowerCase() === monthFilterHabisPakai.toLowerCase();
+                          }
+                          return true;
                         })
                         .map((tx) => {
                           const isExpanded = expandedTxId === tx.id;
@@ -2239,15 +2478,47 @@ export default function App() {
                   </h3>
                   <p className="text-xs text-slate-500">Mencairkan kuota anggaran tunai per bulan berdasarkan pagu terdaftar</p>
                 </div>
-                <button
-                  onClick={() => {
-                    setEditingTarikTunai(null);
-                    setIsTarikTunaiModalOpen(true);
-                  }}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20"
-                >
-                  <Plus className="w-4 h-4" /> Ajukan Tarik Tunai
-                </button>
+                  <div className="flex items-center flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
+                      <span className="text-slate-400 font-medium">Bulan:</span>
+                      <select
+                        value={monthFilterTarikTunai}
+                        onChange={(e) => setMonthFilterTarikTunai(e.target.value)}
+                        className="bg-transparent border-none text-slate-800 font-black focus:outline-none cursor-pointer"
+                      >
+                        <option value="SEMUA">Semua Bulan</option>
+                        {[...bulanTahap1, ...bulanTahap2].map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePrintTarikTunaiTab}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200/80"
+                      title="Cetak Laporan Tarik Tunai"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-slate-500" /> Cetak
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportTarikTunaiTabCsv}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200/80"
+                      title="Unduh CSV Tarik Tunai"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-500" /> Unduh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTarikTunai(null);
+                        setIsTarikTunaiModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-500/20"
+                    >
+                      <Plus className="w-4 h-4" /> Ajukan Tarik Tunai
+                    </button>
+                  </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -2265,7 +2536,14 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
-                    {filteredTarikTunai.map((item) => (
+                    {filteredTarikTunai
+                      .filter((item) => {
+                        if (monthFilterTarikTunai !== 'SEMUA') {
+                          return item.bulan.toLowerCase().trim() === monthFilterTarikTunai.toLowerCase().trim();
+                        }
+                        return true;
+                      })
+                      .map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50 transition duration-150">
                         <td className="py-3 px-4 font-mono font-bold text-slate-500">{item.id}</td>
                         <td className="py-3 px-4 text-slate-800 font-bold">{item.sekolah}</td>
