@@ -112,33 +112,8 @@ const writeJsonFile = (filePath: string, data: any) => {
   }
 };
 
-// --- API Endpoints ---
-
-// Get active API URL and system configurations
-app.get('/api/config', (req, res) => {
-  const config = readJsonFile(CONFIG_FILE, {
-    apiUrl: process.env.VITE_API_URL || '',
-    systemConfig: defaultSystemConfig
-  });
-  res.json({ success: true, ...config });
-});
-
-// Update active API URL and system configurations
-app.post('/api/config', (req, res) => {
-  const { apiUrl, systemConfig } = req.body;
-  const current = readJsonFile(CONFIG_FILE, { apiUrl: '', systemConfig: defaultSystemConfig });
-  
-  const updated = {
-    apiUrl: apiUrl !== undefined ? apiUrl : current.apiUrl,
-    systemConfig: systemConfig !== undefined ? systemConfig : current.systemConfig
-  };
-  
-  writeJsonFile(CONFIG_FILE, updated);
-  res.json({ success: true, ...updated });
-});
-
-// Get general database (Simulator mode fallback database)
-app.get('/api/local-db', (req, res) => {
+// Helper: Load database from local JSON file
+const loadDatabase = async () => {
   const defaultDb = {
     schools: initialSchools,
     operators: initialOperators,
@@ -148,27 +123,83 @@ app.get('/api/local-db', (req, res) => {
     tarikTunaiList: initialTarikTunai,
     systemConfig: defaultSystemConfig
   };
-  const db = readJsonFile(DATABASE_FILE, defaultDb);
-  res.json({ success: true, ...db });
+
+  return readJsonFile(DATABASE_FILE, defaultDb);
+};
+
+// Helper: Save database to local JSON file
+const saveDatabase = async (dbData: any) => {
+  // Always write to local file as backup
+  writeJsonFile(DATABASE_FILE, dbData);
+};
+
+// --- API Endpoints ---
+
+// Get active API URL and system configurations
+app.get('/api/config', async (req, res) => {
+  try {
+    const db = await loadDatabase();
+    res.json({
+      success: true,
+      apiUrl: '',
+      systemConfig: db.systemConfig || defaultSystemConfig
+    });
+  } catch (err: any) {
+    res.json({
+      success: true,
+      apiUrl: '',
+      systemConfig: defaultSystemConfig
+    });
+  }
 });
 
-// Save general database (Simulator mode fallback database)
-app.post('/api/local-db', (req, res) => {
+// Update active API URL and system configurations
+app.post('/api/config', async (req, res) => {
+  const { systemConfig } = req.body;
+  try {
+    const db = await loadDatabase();
+    if (systemConfig) {
+      db.systemConfig = { ...db.systemConfig, ...systemConfig };
+      await saveDatabase(db);
+    }
+    res.json({ success: true, systemConfig: db.systemConfig });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get general database
+app.get('/api/local-db', async (req, res) => {
+  try {
+    const db = await loadDatabase();
+    res.json({ success: true, ...db });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Save general database
+app.post('/api/local-db', async (req, res) => {
   const { schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig } = req.body;
-  const current = readJsonFile(DATABASE_FILE, {});
   
-  const updated = {
-    schools: schools || current.schools || initialSchools,
-    operators: operators || current.operators || initialOperators,
-    monthlyPagu: monthlyPagu || current.monthlyPagu || initialMonthlyPagu,
-    rabList: rabList || current.rabList || initialRAB,
-    transactions: transactions || current.transactions || initialTransactions,
-    tarikTunaiList: tarikTunaiList || current.tarikTunaiList || initialTarikTunai,
-    systemConfig: systemConfig || current.systemConfig || defaultSystemConfig
-  };
-  
-  writeJsonFile(DATABASE_FILE, updated);
-  res.json({ success: true });
+  try {
+    const current = await loadDatabase();
+    
+    const updated = {
+      schools: schools || current.schools || initialSchools,
+      operators: operators || current.operators || initialOperators,
+      monthlyPagu: monthlyPagu || current.monthlyPagu || initialMonthlyPagu,
+      rabList: rabList || current.rabList || initialRAB,
+      transactions: transactions || current.transactions || initialTransactions,
+      tarikTunaiList: tarikTunaiList || current.tarikTunaiList || initialTarikTunai,
+      systemConfig: systemConfig || current.systemConfig || defaultSystemConfig
+    };
+    
+    await saveDatabase(updated);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Start server
