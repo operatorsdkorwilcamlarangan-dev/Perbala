@@ -2396,7 +2396,18 @@ export default function App() {
                     const totalPaguKategori = rabList
                       .filter((r) => r.kategori === targetCat && isSchoolMatch(r.sekolah))
                       .reduce((sum, curr) => sum + curr.alokasi, 0);
-                    return <h3 className="text-xl font-extrabold text-slate-800 mt-1">{formatRupiah(totalPaguKategori)}</h3>;
+                    const percentage = totalPaguTahunan > 0 ? (totalPaguKategori / totalPaguTahunan) * 100 : 0;
+                    return (
+                      <div className="mt-1">
+                        <h3 className="text-xl font-extrabold text-slate-800">{formatRupiah(totalPaguKategori)}</h3>
+                        <div className="text-[11px] font-bold text-slate-500 mt-2.5 flex flex-wrap items-center gap-1.5">
+                          <span className="px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 font-extrabold text-[10px]">
+                            {percentage.toFixed(1)}%
+                          </span>
+                          <span>dari total pagu 1 tahun ({formatRupiah(totalPaguTahunan)})</span>
+                        </div>
+                      </div>
+                    );
                   })()}
                 </div>
                 <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
