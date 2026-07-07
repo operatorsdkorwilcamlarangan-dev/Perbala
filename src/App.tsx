@@ -250,103 +250,121 @@ export default function App() {
         const firestoreTarik = data.tarikTunaiList || initialTarikTunai;
         const firestoreConfig = data.systemConfig || defaultSystemConfig;
 
-        // Perform smart union merge between local state (loaded from localStorage or active) and Firestore state
-        // 1. Merge Schools (by npsn)
-        const mergedSchools = [...firestoreSchools];
-        currentSchools.forEach((localSchool: School) => {
-          const idx = mergedSchools.findIndex((s) => s.npsn === localSchool.npsn);
-          if (idx === -1) {
-            mergedSchools.push(localSchool);
+        let dbState;
+
+        if (!isInitialLoaded.current) {
+          // Perform smart union merge between local state (loaded from localStorage or active) and Firestore state on the very first load
+          // 1. Merge Schools (by npsn)
+          const mergedSchools = [...firestoreSchools];
+          currentSchools.forEach((localSchool: School) => {
+            const idx = mergedSchools.findIndex((s) => s.npsn === localSchool.npsn);
+            if (idx === -1) {
+              mergedSchools.push(localSchool);
+            } else {
+              mergedSchools[idx] = { ...mergedSchools[idx], ...localSchool };
+            }
+          });
+
+          // 2. Merge Operators (by username)
+          const mergedOperators = [...firestoreOperators];
+          currentOperators.forEach((localOp: Operator) => {
+            const idx = mergedOperators.findIndex((o) => o.username === localOp.username);
+            if (idx === -1) {
+              mergedOperators.push(localOp);
+            } else {
+              mergedOperators[idx] = { ...mergedOperators[idx], ...localOp };
+            }
+          });
+
+          // 3. Merge Monthly Pagu (by sekolah & bulan)
+          const mergedMonthlyPagu = [...firestoreMonthlyPagu];
+          currentMonthlyPagu.forEach((localPagu: MonthlyPagu) => {
+            const idx = mergedMonthlyPagu.findIndex((p) => p.sekolah === localPagu.sekolah && p.bulan === localPagu.bulan);
+            if (idx === -1) {
+              mergedMonthlyPagu.push(localPagu);
+            } else {
+              mergedMonthlyPagu[idx] = { ...mergedMonthlyPagu[idx], ...localPagu };
+            }
+          });
+
+          // 4. Merge RAB (by id)
+          const mergedRab = [...firestoreRab];
+          currentRab.forEach((localRab: RAB) => {
+            const idx = mergedRab.findIndex((r) => r.id === localRab.id);
+            if (idx === -1) {
+              mergedRab.push(localRab);
+            } else {
+              mergedRab[idx] = { ...mergedRab[idx], ...localRab };
+            }
+          });
+
+          // 5. Merge Transactions (by id)
+          const mergedTx = [...firestoreTx];
+          currentTx.forEach((localTx: Transaction) => {
+            const idx = mergedTx.findIndex((t) => t.id === localTx.id);
+            if (idx === -1) {
+              mergedTx.unshift(localTx); // Keep new local items on top
+            } else {
+              mergedTx[idx] = { ...mergedTx[idx], ...localTx };
+            }
+          });
+
+          // 6. Merge Tarik Tunai (by id)
+          const mergedTarik = [...firestoreTarik];
+          currentTarik.forEach((localTarik: TarikTunai) => {
+            const idx = mergedTarik.findIndex((t) => t.id === localTarik.id);
+            if (idx === -1) {
+              mergedTarik.unshift(localTarik); // Keep new local items on top
+            } else {
+              mergedTarik[idx] = { ...mergedTarik[idx], ...localTarik };
+            }
+          });
+
+          const mergedConfig = { ...firestoreConfig, ...currentConfig };
+
+          dbState = {
+            schools: mergedSchools,
+            operators: mergedOperators,
+            monthlyPagu: mergedMonthlyPagu,
+            rabList: mergedRab,
+            transactions: mergedTx,
+            tarikTunaiList: mergedTarik,
+            systemConfig: mergedConfig
+          };
+
+          const dbStateStr = JSON.stringify(dbState);
+
+          // Check if there are any merged changes (local changes that need syncing back to server)
+          const serverStateStr = JSON.stringify({
+            schools: firestoreSchools,
+            operators: firestoreOperators,
+            monthlyPagu: firestoreMonthlyPagu,
+            rabList: firestoreRab,
+            transactions: firestoreTx,
+            tarikTunaiList: firestoreTarik,
+            systemConfig: firestoreConfig
+          });
+
+          if (dbStateStr !== serverStateStr) {
+            // Setting lastSyncedData to the older raw server state will trigger the second useEffect
+            // to schedule a setDoc save of the merged states back to the Firestore server!
+            lastSyncedData.current = serverStateStr;
           } else {
-            mergedSchools[idx] = { ...mergedSchools[idx], ...localSchool };
+            lastSyncedData.current = dbStateStr;
           }
-        });
-
-        // 2. Merge Operators (by username)
-        const mergedOperators = [...firestoreOperators];
-        currentOperators.forEach((localOp: Operator) => {
-          const idx = mergedOperators.findIndex((o) => o.username === localOp.username);
-          if (idx === -1) {
-            mergedOperators.push(localOp);
-          } else {
-            mergedOperators[idx] = { ...mergedOperators[idx], ...localOp };
-          }
-        });
-
-        // 3. Merge Monthly Pagu (by sekolah & bulan)
-        const mergedMonthlyPagu = [...firestoreMonthlyPagu];
-        currentMonthlyPagu.forEach((localPagu: MonthlyPagu) => {
-          const idx = mergedMonthlyPagu.findIndex((p) => p.sekolah === localPagu.sekolah && p.bulan === localPagu.bulan);
-          if (idx === -1) {
-            mergedMonthlyPagu.push(localPagu);
-          } else {
-            mergedMonthlyPagu[idx] = { ...mergedMonthlyPagu[idx], ...localPagu };
-          }
-        });
-
-        // 4. Merge RAB (by id)
-        const mergedRab = [...firestoreRab];
-        currentRab.forEach((localRab: RAB) => {
-          const idx = mergedRab.findIndex((r) => r.id === localRab.id);
-          if (idx === -1) {
-            mergedRab.push(localRab);
-          } else {
-            mergedRab[idx] = { ...mergedRab[idx], ...localRab };
-          }
-        });
-
-        // 5. Merge Transactions (by id)
-        const mergedTx = [...firestoreTx];
-        currentTx.forEach((localTx: Transaction) => {
-          const idx = mergedTx.findIndex((t) => t.id === localTx.id);
-          if (idx === -1) {
-            mergedTx.unshift(localTx); // Keep new local items on top
-          } else {
-            mergedTx[idx] = { ...mergedTx[idx], ...localTx };
-          }
-        });
-
-        // 6. Merge Tarik Tunai (by id)
-        const mergedTarik = [...firestoreTarik];
-        currentTarik.forEach((localTarik: TarikTunai) => {
-          const idx = mergedTarik.findIndex((t) => t.id === localTarik.id);
-          if (idx === -1) {
-            mergedTarik.unshift(localTarik); // Keep new local items on top
-          } else {
-            mergedTarik[idx] = { ...mergedTarik[idx], ...localTarik };
-          }
-        });
-
-        const mergedConfig = { ...firestoreConfig, ...currentConfig };
-
-        const dbState = {
-          schools: mergedSchools,
-          operators: mergedOperators,
-          monthlyPagu: mergedMonthlyPagu,
-          rabList: mergedRab,
-          transactions: mergedTx,
-          tarikTunaiList: mergedTarik,
-          systemConfig: mergedConfig
-        };
-        const dbStateStr = JSON.stringify(dbState);
-
-        // Check if there are any merged changes (local changes that need syncing back to server)
-        const serverStateStr = JSON.stringify({
-          schools: firestoreSchools,
-          operators: firestoreOperators,
-          monthlyPagu: firestoreMonthlyPagu,
-          rabList: firestoreRab,
-          transactions: firestoreTx,
-          tarikTunaiList: firestoreTarik,
-          systemConfig: firestoreConfig
-        });
-
-        if (dbStateStr !== serverStateStr) {
-          // Setting lastSyncedData to the older raw server state will trigger the second useEffect
-          // to schedule a setDoc save of the merged states back to the Firestore server!
-          lastSyncedData.current = serverStateStr;
         } else {
-          lastSyncedData.current = dbStateStr;
+          // Once initial load is completed, Firestore is the absolute source of truth.
+          // Directly adopt the Firestore data to enable correct edits/deletions without union-merging stale states.
+          dbState = {
+            schools: firestoreSchools,
+            operators: firestoreOperators,
+            monthlyPagu: firestoreMonthlyPagu,
+            rabList: firestoreRab,
+            transactions: firestoreTx,
+            tarikTunaiList: firestoreTarik,
+            systemConfig: firestoreConfig
+          };
+          lastSyncedData.current = JSON.stringify(dbState);
         }
 
         // Update React states
