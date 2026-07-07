@@ -88,13 +88,67 @@ export default function App() {
   const [isLoginLoading, setIsLoginLoading] = useState(false);
 
   // Core Database States (Persisted in LocalStorage or Synced with WebApp API)
-  const [schools, setSchools] = useState<School[]>([]);
-  const [operators, setOperators] = useState<Operator[]>([]);
-  const [monthlyPagu, setMonthlyPagu] = useState<MonthlyPagu[]>([]);
-  const [rabList, setRabList] = useState<RAB[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [tarikTunaiList, setTarikTunaiList] = useState<TarikTunai[]>([]);
-  const [systemConfig, setSystemConfig] = useState<SystemConfig>(defaultSystemConfig);
+  const [schools, setSchools] = useState<School[]>(() => {
+    try {
+      const data = localStorage.getItem('perbala_schools');
+      return data ? JSON.parse(data) : initialSchools;
+    } catch {
+      return initialSchools;
+    }
+  });
+  const [operators, setOperators] = useState<Operator[]>(() => {
+    try {
+      const data = localStorage.getItem('perbala_operators');
+      return data ? JSON.parse(data) : initialOperators;
+    } catch {
+      return initialOperators;
+    }
+  });
+  const [monthlyPagu, setMonthlyPagu] = useState<MonthlyPagu[]>(() => {
+    try {
+      const data = localStorage.getItem('perbala_monthly_pagu');
+      return data ? JSON.parse(data) : initialMonthlyPagu;
+    } catch {
+      return initialMonthlyPagu;
+    }
+  });
+  const [rabList, setRabList] = useState<RAB[]>(() => {
+    try {
+      const data = localStorage.getItem('perbala_rab');
+      return data ? JSON.parse(data) : initialRAB;
+    } catch {
+      return initialRAB;
+    }
+  });
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    try {
+      const data = localStorage.getItem('perbala_transactions');
+      return data ? JSON.parse(data) : initialTransactions;
+    } catch {
+      return initialTransactions;
+    }
+  });
+  const [tarikTunaiList, setTarikTunaiList] = useState<TarikTunai[]>(() => {
+    try {
+      const data = localStorage.getItem('perbala_tarik_tunai');
+      return data ? JSON.parse(data) : initialTarikTunai;
+    } catch {
+      return initialTarikTunai;
+    }
+  });
+  const [systemConfig, setSystemConfig] = useState<SystemConfig>(() => {
+    try {
+      return {
+        org_name: localStorage.getItem('perbala_org_name') || defaultSystemConfig.org_name,
+        logo_preset: localStorage.getItem('perbala_logo_preset') || defaultSystemConfig.logo_preset,
+        logo_url: localStorage.getItem('perbala_logo_url') || defaultSystemConfig.logo_url,
+        deadline_t1: localStorage.getItem('perbala_deadline_t1') || defaultSystemConfig.deadline_t1,
+        deadline_t2: localStorage.getItem('perbala_deadline_t2') || defaultSystemConfig.deadline_t2,
+      };
+    } catch {
+      return defaultSystemConfig;
+    }
+  });
   const [syncStatus, setSyncStatus] = useState<'active' | 'error' | 'syncing'>('active');
   const [syncErrorReason, setSyncErrorReason] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
@@ -187,17 +241,113 @@ export default function App() {
       if (snapshot.exists()) {
         const data = snapshot.data();
         
+        // Firestore data or default fallbacks
+        const firestoreSchools = data.schools || initialSchools;
+        const firestoreOperators = data.operators || initialOperators;
+        const firestoreMonthlyPagu = data.monthlyPagu || initialMonthlyPagu;
+        const firestoreRab = data.rabList || initialRAB;
+        const firestoreTx = data.transactions || initialTransactions;
+        const firestoreTarik = data.tarikTunaiList || initialTarikTunai;
+        const firestoreConfig = data.systemConfig || defaultSystemConfig;
+
+        // Perform smart union merge between local state (loaded from localStorage or active) and Firestore state
+        // 1. Merge Schools (by npsn)
+        const mergedSchools = [...firestoreSchools];
+        currentSchools.forEach((localSchool: School) => {
+          const idx = mergedSchools.findIndex((s) => s.npsn === localSchool.npsn);
+          if (idx === -1) {
+            mergedSchools.push(localSchool);
+          } else {
+            mergedSchools[idx] = { ...mergedSchools[idx], ...localSchool };
+          }
+        });
+
+        // 2. Merge Operators (by username)
+        const mergedOperators = [...firestoreOperators];
+        currentOperators.forEach((localOp: Operator) => {
+          const idx = mergedOperators.findIndex((o) => o.username === localOp.username);
+          if (idx === -1) {
+            mergedOperators.push(localOp);
+          } else {
+            mergedOperators[idx] = { ...mergedOperators[idx], ...localOp };
+          }
+        });
+
+        // 3. Merge Monthly Pagu (by sekolah & bulan)
+        const mergedMonthlyPagu = [...firestoreMonthlyPagu];
+        currentMonthlyPagu.forEach((localPagu: MonthlyPagu) => {
+          const idx = mergedMonthlyPagu.findIndex((p) => p.sekolah === localPagu.sekolah && p.bulan === localPagu.bulan);
+          if (idx === -1) {
+            mergedMonthlyPagu.push(localPagu);
+          } else {
+            mergedMonthlyPagu[idx] = { ...mergedMonthlyPagu[idx], ...localPagu };
+          }
+        });
+
+        // 4. Merge RAB (by id)
+        const mergedRab = [...firestoreRab];
+        currentRab.forEach((localRab: RAB) => {
+          const idx = mergedRab.findIndex((r) => r.id === localRab.id);
+          if (idx === -1) {
+            mergedRab.push(localRab);
+          } else {
+            mergedRab[idx] = { ...mergedRab[idx], ...localRab };
+          }
+        });
+
+        // 5. Merge Transactions (by id)
+        const mergedTx = [...firestoreTx];
+        currentTx.forEach((localTx: Transaction) => {
+          const idx = mergedTx.findIndex((t) => t.id === localTx.id);
+          if (idx === -1) {
+            mergedTx.unshift(localTx); // Keep new local items on top
+          } else {
+            mergedTx[idx] = { ...mergedTx[idx], ...localTx };
+          }
+        });
+
+        // 6. Merge Tarik Tunai (by id)
+        const mergedTarik = [...firestoreTarik];
+        currentTarik.forEach((localTarik: TarikTunai) => {
+          const idx = mergedTarik.findIndex((t) => t.id === localTarik.id);
+          if (idx === -1) {
+            mergedTarik.unshift(localTarik); // Keep new local items on top
+          } else {
+            mergedTarik[idx] = { ...mergedTarik[idx], ...localTarik };
+          }
+        });
+
+        const mergedConfig = { ...firestoreConfig, ...currentConfig };
+
         const dbState = {
-          schools: data.schools || initialSchools,
-          operators: data.operators || initialOperators,
-          monthlyPagu: data.monthlyPagu || initialMonthlyPagu,
-          rabList: data.rabList || initialRAB,
-          transactions: data.transactions || initialTransactions,
-          tarikTunaiList: data.tarikTunaiList || initialTarikTunai,
-          systemConfig: data.systemConfig || defaultSystemConfig
+          schools: mergedSchools,
+          operators: mergedOperators,
+          monthlyPagu: mergedMonthlyPagu,
+          rabList: mergedRab,
+          transactions: mergedTx,
+          tarikTunaiList: mergedTarik,
+          systemConfig: mergedConfig
         };
         const dbStateStr = JSON.stringify(dbState);
-        lastSyncedData.current = dbStateStr;
+
+        // Check if there are any merged changes (local changes that need syncing back to server)
+        const serverStateStr = JSON.stringify({
+          schools: firestoreSchools,
+          operators: firestoreOperators,
+          monthlyPagu: firestoreMonthlyPagu,
+          rabList: firestoreRab,
+          transactions: firestoreTx,
+          tarikTunaiList: firestoreTarik,
+          systemConfig: firestoreConfig
+        });
+
+        if (dbStateStr !== serverStateStr) {
+          // Setting lastSyncedData to the older raw server state will trigger the second useEffect
+          // to schedule a setDoc save of the merged states back to the Firestore server!
+          lastSyncedData.current = serverStateStr;
+        } else {
+          lastSyncedData.current = dbStateStr;
+        }
 
         // Update React states
         setSchools(dbState.schools);
@@ -341,37 +491,8 @@ export default function App() {
 
   // 1. Initial State Load on mount & Real-Time Cloud Synchronization
   useEffect(() => {
-    // 1.1 First load from LocalStorage as instantaneous offline fallback
-    const loadState = <T,>(key: string, fallback: T): T => {
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : fallback;
-    };
-
-    const localSchools = loadState('perbala_schools', initialSchools);
-    const localOperators = loadState('perbala_operators', initialOperators);
-    const localMonthlyPagu = loadState('perbala_monthly_pagu', initialMonthlyPagu);
-    const localRab = loadState('perbala_rab', initialRAB);
-    const localTx = loadState('perbala_transactions', initialTransactions);
-    const localTarik = loadState('perbala_tarik_tunai', initialTarikTunai);
-
-    setSchools(localSchools);
-    setOperators(localOperators);
-    setMonthlyPagu(localMonthlyPagu);
-    setRabList(localRab);
-    setTransactions(localTx);
-    setTarikTunaiList(localTarik);
-
-    const savedConfig: SystemConfig = {
-      org_name: localStorage.getItem('perbala_org_name') || defaultSystemConfig.org_name,
-      logo_preset: localStorage.getItem('perbala_logo_preset') || defaultSystemConfig.logo_preset,
-      logo_url: localStorage.getItem('perbala_logo_url') || defaultSystemConfig.logo_url,
-      deadline_t1: localStorage.getItem('perbala_deadline_t1') || defaultSystemConfig.deadline_t1,
-      deadline_t2: localStorage.getItem('perbala_deadline_t2') || defaultSystemConfig.deadline_t2,
-    };
-    setSystemConfig(savedConfig);
-
-    // 1.2 Subscribe to real-time updates from Firestore
-    startFirestoreSync(localSchools, localOperators, localMonthlyPagu, localRab, localTx, localTarik, savedConfig, false);
+    // 1.2 Subscribe to real-time updates from Firestore using the pre-loaded useState states
+    startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, false);
 
     return () => {
       if (firestoreUnsubscribeRef.current) {
@@ -385,15 +506,15 @@ export default function App() {
 
   // 2. Persist states in LocalStorage and Firestore whenever they change (debounced)
   useEffect(() => {
-    if (!isInitialLoaded.current) return;
-
-    // Save to LocalStorage immediately for instant local performance
+    // Save to LocalStorage immediately for instant local performance (no gating required!)
     localStorage.setItem('perbala_schools', JSON.stringify(schools));
     localStorage.setItem('perbala_operators', JSON.stringify(operators));
     localStorage.setItem('perbala_monthly_pagu', JSON.stringify(monthlyPagu));
     localStorage.setItem('perbala_rab', JSON.stringify(rabList));
     localStorage.setItem('perbala_transactions', JSON.stringify(transactions));
     localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
+
+    if (!isInitialLoaded.current) return;
 
     const currentDbState = {
       schools,
