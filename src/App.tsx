@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import {
   School,
   Operator,
@@ -293,6 +293,7 @@ export default function App() {
           tarikTunaiList: firestoreTarik,
           systemConfig: firestoreConfig
         };
+        isLocalChange.current = false; // Prevent writeback loop on incoming remote state changes
         lastSyncedData.current = JSON.stringify(dbState);
 
         // Update React states using raw setters to prevent flagging this as a local/user change
@@ -406,6 +407,120 @@ export default function App() {
     firestoreUnsubscribeRef.current = unsubscribe;
   };
 
+  // Fetch the absolute newest data from Firestore (bypassing caching/snapshots for clicking synchronization button)
+  const loadDatabaseFromApi = async (isManual = true) => {
+    setIsLoadingData(true);
+    setSyncStatus('syncing');
+    setSyncErrorReason(null);
+    if (isManual) {
+      addToast('Menghubungkan', 'Mengambil data terbaru dari server awan...', 'info');
+    }
+    try {
+      const docRef = doc(db, 'app_data', 'database');
+      const snapshot = await getDoc(docRef);
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        
+        // Firestore data or default fallbacks
+        const firestoreSchools = data.schools || initialSchools;
+        const firestoreOperators = data.operators || initialOperators;
+        const firestoreMonthlyPagu = data.monthlyPagu || initialMonthlyPagu;
+        const firestoreRab = data.rabList || initialRAB;
+        const firestoreTx = data.transactions || initialTransactions;
+        const firestoreTarik = data.tarikTunaiList || initialTarikTunai;
+        const firestoreConfig = data.systemConfig || defaultSystemConfig;
+
+        const dbState = {
+          schools: firestoreSchools,
+          operators: firestoreOperators,
+          monthlyPagu: firestoreMonthlyPagu,
+          rabList: firestoreRab,
+          transactions: firestoreTx,
+          tarikTunaiList: firestoreTarik,
+          systemConfig: firestoreConfig
+        };
+        
+        // Block save useEffect from triggering on these initial loads
+        isLocalChange.current = false;
+        lastSyncedData.current = JSON.stringify(dbState);
+
+        // Update React states using raw setters to prevent flagging this as a local/user change
+        rawSetSchools(dbState.schools);
+        rawSetOperators(dbState.operators);
+        rawSetMonthlyPagu(dbState.monthlyPagu);
+        rawSetRabList(dbState.rabList);
+        rawSetTransactions(dbState.transactions);
+        rawSetTarikTunaiList(dbState.tarikTunaiList);
+        rawSetSystemConfig(dbState.systemConfig);
+
+        // Update LocalStorage
+        localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
+        localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
+        localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
+        localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
+        localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
+        localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
+        localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
+        localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
+        localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
+        localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
+        localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
+
+        setSyncStatus('active');
+        setLastSyncTime(new Date());
+        isInitialLoaded.current = true;
+
+        if (isManual) {
+          addToast('Sinkronisasi Sukses', 'Basis data berhasil disinkronkan dengan data terbaru dari awan.', 'success');
+        }
+      } else {
+        // Document doesn't exist, create it with current states
+        const defaultDb = {
+          schools,
+          operators,
+          monthlyPagu,
+          rabList,
+          transactions,
+          tarikTunaiList,
+          systemConfig
+        };
+        lastSyncedData.current = JSON.stringify(defaultDb);
+        await setDoc(docRef, defaultDb);
+        
+        setSyncStatus('active');
+        setLastSyncTime(new Date());
+        isInitialLoaded.current = true;
+        
+        if (isManual) {
+          addToast('Sinkronisasi Sukses', 'Basis data berhasil diinisialisasi dan disinkronkan dengan server awan.', 'success');
+        }
+      }
+      
+      // Keep real-time snapshot subscription active
+      startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, false);
+      setIsLoadingData(false);
+    } catch (err: any) {
+      console.error('Failed manual pull from Firestore:', err);
+      setIsLoadingData(false);
+      setSyncStatus('error');
+      
+      let reason = 'Gagal mengambil data terbaru dari server awan';
+      if (err && err.code === 'permission-denied') {
+        reason = 'Izin ditolak oleh aturan keamanan server';
+      } else if (err && err.message) {
+        reason = err.message;
+      }
+      setSyncErrorReason(reason);
+      
+      if (isManual) {
+        addToast('Koneksi Gagal', 'Gagal menyegarkan data terbaru dari basis data awan.', 'error');
+      }
+      
+      // Subscribe to real-time sync as fallback anyway
+      startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, false);
+    }
+  };
+
   // Sync simulated/local database state to the Express server as backup
   const saveDatabaseToServer = async (
     currentSchools = schools,
@@ -437,8 +552,8 @@ export default function App() {
 
   // 1. Initial State Load on mount & Real-Time Cloud Synchronization
   useEffect(() => {
-    // 1.2 Subscribe to real-time updates from Firestore using the pre-loaded useState states
-    startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, false);
+    // Fetch absolute newest database from Firestore server first, then subscribes to onSnapshot
+    loadDatabaseFromApi(false);
 
     return () => {
       if (firestoreUnsubscribeRef.current) {
@@ -628,22 +743,6 @@ export default function App() {
   // Sisa Anggaran: Pagu Tahunan - Approved realisasi - Tarik selesai
   const sisaAnggaranBersih = Math.max(0, totalPaguTahunan - approvedRealisasiT1 - totalTarikSelesai);
 
-  // Sync / Load database data from Cloud Server
-  const loadDatabaseFromApi = async () => {
-    setIsLoadingData(true);
-    setSyncErrorReason(null);
-    addToast('Menghubungkan', 'Mencoba menghubungkan kembali ke basis data awan...', 'info');
-    try {
-      startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, true);
-      setIsLoadingData(false);
-    } catch (err: any) {
-      setIsLoadingData(false);
-      setSyncStatus('error');
-      setSyncErrorReason(err.message || 'Gagal menginisialisasi Firestore');
-      addToast('Koneksi Gagal', 'Gagal menghubungkan ke basis data awan Firestore.', 'error');
-    }
-  };
-
   // Perform Logged Activity (locally or noop since spreadsheet is removed)
   const logActivity = async (actionName: string, detail: string) => {
     console.log(`Activity Log: ${actionName} - ${detail}`);
@@ -686,7 +785,8 @@ export default function App() {
       if (matched) {
         setCurrentUser(matched);
         setSchoolFilter(matched.role === 'Admin' ? 'SEMUA' : matched.instansi);
-        addToast('Login Berhasil', `Selamat datang kembali, ${matched.nama}! (Offline Mode)`, 'success');
+        addToast('Login Berhasil', `Selamat datang kembali, ${matched.nama}!`, 'success');
+        loadDatabaseFromApi(false);
       } else {
         addToast('Gagal Masuk', 'Username atau password salah!', 'error');
       }
