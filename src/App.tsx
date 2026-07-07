@@ -88,7 +88,7 @@ export default function App() {
   const [isLoginLoading, setIsLoginLoading] = useState(false);
 
   // Core Database States (Persisted in LocalStorage or Synced with WebApp API)
-  const [schools, setSchools] = useState<School[]>(() => {
+  const [schools, rawSetSchools] = useState<School[]>(() => {
     try {
       const data = localStorage.getItem('perbala_schools');
       return data ? JSON.parse(data) : initialSchools;
@@ -96,7 +96,7 @@ export default function App() {
       return initialSchools;
     }
   });
-  const [operators, setOperators] = useState<Operator[]>(() => {
+  const [operators, rawSetOperators] = useState<Operator[]>(() => {
     try {
       const data = localStorage.getItem('perbala_operators');
       return data ? JSON.parse(data) : initialOperators;
@@ -104,7 +104,7 @@ export default function App() {
       return initialOperators;
     }
   });
-  const [monthlyPagu, setMonthlyPagu] = useState<MonthlyPagu[]>(() => {
+  const [monthlyPagu, rawSetMonthlyPagu] = useState<MonthlyPagu[]>(() => {
     try {
       const data = localStorage.getItem('perbala_monthly_pagu');
       return data ? JSON.parse(data) : initialMonthlyPagu;
@@ -112,7 +112,7 @@ export default function App() {
       return initialMonthlyPagu;
     }
   });
-  const [rabList, setRabList] = useState<RAB[]>(() => {
+  const [rabList, rawSetRabList] = useState<RAB[]>(() => {
     try {
       const data = localStorage.getItem('perbala_rab');
       return data ? JSON.parse(data) : initialRAB;
@@ -120,7 +120,7 @@ export default function App() {
       return initialRAB;
     }
   });
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+  const [transactions, rawSetTransactions] = useState<Transaction[]>(() => {
     try {
       const data = localStorage.getItem('perbala_transactions');
       return data ? JSON.parse(data) : initialTransactions;
@@ -128,7 +128,7 @@ export default function App() {
       return initialTransactions;
     }
   });
-  const [tarikTunaiList, setTarikTunaiList] = useState<TarikTunai[]>(() => {
+  const [tarikTunaiList, rawSetTarikTunaiList] = useState<TarikTunai[]>(() => {
     try {
       const data = localStorage.getItem('perbala_tarik_tunai');
       return data ? JSON.parse(data) : initialTarikTunai;
@@ -136,7 +136,7 @@ export default function App() {
       return initialTarikTunai;
     }
   });
-  const [systemConfig, setSystemConfig] = useState<SystemConfig>(() => {
+  const [systemConfig, rawSetSystemConfig] = useState<SystemConfig>(() => {
     try {
       return {
         org_name: localStorage.getItem('perbala_org_name') || defaultSystemConfig.org_name,
@@ -149,6 +149,39 @@ export default function App() {
       return defaultSystemConfig;
     }
   });
+
+  // Local change tracking ref to strictly gate Firestore write-back triggers
+  const isLocalChange = useRef(false);
+
+  // Wrapped state setters that flag the change as user-initiated / local
+  const setSchools = (val: School[] | ((prev: School[]) => School[])) => {
+    isLocalChange.current = true;
+    rawSetSchools(val);
+  };
+  const setOperators = (val: Operator[] | ((prev: Operator[]) => Operator[])) => {
+    isLocalChange.current = true;
+    rawSetOperators(val);
+  };
+  const setMonthlyPagu = (val: MonthlyPagu[] | ((prev: MonthlyPagu[]) => MonthlyPagu[])) => {
+    isLocalChange.current = true;
+    rawSetMonthlyPagu(val);
+  };
+  const setRabList = (val: RAB[] | ((prev: RAB[]) => RAB[])) => {
+    isLocalChange.current = true;
+    rawSetRabList(val);
+  };
+  const setTransactions = (val: Transaction[] | ((prev: Transaction[]) => Transaction[])) => {
+    isLocalChange.current = true;
+    rawSetTransactions(val);
+  };
+  const setTarikTunaiList = (val: TarikTunai[] | ((prev: TarikTunai[]) => TarikTunai[])) => {
+    isLocalChange.current = true;
+    rawSetTarikTunaiList(val);
+  };
+  const setSystemConfig = (val: SystemConfig | ((prev: SystemConfig) => SystemConfig)) => {
+    isLocalChange.current = true;
+    rawSetSystemConfig(val);
+  };
   const [syncStatus, setSyncStatus] = useState<'active' | 'error' | 'syncing'>('active');
   const [syncErrorReason, setSyncErrorReason] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
@@ -262,14 +295,14 @@ export default function App() {
         };
         lastSyncedData.current = JSON.stringify(dbState);
 
-        // Update React states
-        setSchools(dbState.schools);
-        setOperators(dbState.operators);
-        setMonthlyPagu(dbState.monthlyPagu);
-        setRabList(dbState.rabList);
-        setTransactions(dbState.transactions);
-        setTarikTunaiList(dbState.tarikTunaiList);
-        setSystemConfig(dbState.systemConfig);
+        // Update React states using raw setters to prevent flagging this as a local/user change
+        rawSetSchools(dbState.schools);
+        rawSetOperators(dbState.operators);
+        rawSetMonthlyPagu(dbState.monthlyPagu);
+        rawSetRabList(dbState.rabList);
+        rawSetTransactions(dbState.transactions);
+        rawSetTarikTunaiList(dbState.tarikTunaiList);
+        rawSetSystemConfig(dbState.systemConfig);
 
         // Update LocalStorage
         localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
@@ -428,6 +461,7 @@ export default function App() {
     localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
 
     if (!isInitialLoaded.current) return;
+    if (!isLocalChange.current) return; // STRICTLY Gated: Only save if there was a user-initiated change
 
     const currentDbState = {
       schools,
@@ -449,6 +483,7 @@ export default function App() {
     const debounceTimer = setTimeout(() => {
       if (currentDbStateStr !== lastSyncedData.current) {
         lastSyncedData.current = currentDbStateStr;
+        isLocalChange.current = false; // Reset local change flag because we are committing to save this specific state
         
         setSyncStatus('syncing');
         const docRef = doc(db, 'app_data', 'database');
