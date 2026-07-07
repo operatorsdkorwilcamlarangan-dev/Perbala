@@ -293,8 +293,26 @@ export default function App() {
           tarikTunaiList: firestoreTarik,
           systemConfig: firestoreConfig
         };
+
+        const dbStateStr = JSON.stringify(dbState);
+
+        // 1. STRICT GUARD: If there is a pending unsaved local change,
+        // do not let real-time listener overwrite our unsaved changes with older server data.
+        if (isLocalChange.current) {
+          console.log('Skipping real-time update because there are pending local changes.');
+          return;
+        }
+
+        // 2. OPTIMIZATION: If the incoming data is identical to what we have, skip redundant updates
+        if (dbStateStr === lastSyncedData.current) {
+          setSyncStatus('active');
+          setLastSyncTime(new Date());
+          isInitialLoaded.current = true;
+          return;
+        }
+
         isLocalChange.current = false; // Prevent writeback loop on incoming remote state changes
-        lastSyncedData.current = JSON.stringify(dbState);
+        lastSyncedData.current = dbStateStr;
 
         // Update React states using raw setters to prevent flagging this as a local/user change
         rawSetSchools(dbState.schools);
